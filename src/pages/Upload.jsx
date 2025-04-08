@@ -110,7 +110,7 @@ export default function Upload() {
     };
 
     try {
-      const response = await axios.post(API_ENDPOINTS.resumes.base, formData, config); 
+      const response = await axios.post(API_ENDPOINTS.resumes.submit, formData, config); 
       
       toast({
         title: 'Upload & Basic Check Successful',

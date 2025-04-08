@@ -35,6 +35,8 @@ import {
   Textarea,
   FormControl,
   FormLabel,
+  Alert,
+  AlertIcon,
 } from '@chakra-ui/react';
 import { DownloadIcon, RepeatIcon, ViewIcon, ChatIcon, EditIcon, CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 import { motion } from 'framer-motion';
@@ -42,6 +44,7 @@ import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
 import { loadStripe } from '@stripe/stripe-js';
+import { useNavigate } from 'react-router-dom';
 
 const MotionBox = motion(Box);
 const MotionContainer = motion(Container);
@@ -64,14 +67,14 @@ const itemVariants = {
 };
 
 // Load Stripe (replace with your actual public key)
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY || 'pk_test_YOUR_PUBLIC_KEY');
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_YOUR_PUBLIC_KEY');
 
 export default function Dashboard() {
   const [submissions, setSubmissions] = useState([]);
   const [reviewOrders, setReviewOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { user } = useAuth();
+  const { user, refreshUserProfile } = useAuth();
   const toast = useToast();
   const { isOpen: isFeedbackModalOpen, onOpen: onFeedbackModalOpen, onClose: onFeedbackModalClose } = useDisclosure();
   const { isOpen: isReviewModalOpen, onOpen: onReviewModalOpen, onClose: onReviewModalClose } = useDisclosure();
@@ -80,18 +83,60 @@ export default function Dashboard() {
   const [jobDescriptionText, setJobDescriptionText] = useState('');
   const [isJdLoading, setIsJdLoading] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const navigate = useNavigate();
+
+  // Custom close handler for the feedback modal to refetch data
+  const handleFeedbackModalClose = () => {
+    onFeedbackModalClose();
+    // Refetch data when modal closes to ensure review status is updated
+    fetchData(); 
+  };
+
+  // Check if the selected submission is currently under review
+  const isUnderReview = selectedSubmission && (
+    // EITHER a relevant review order exists...
+    reviewOrders.some(
+      r => r.resumeId === selectedSubmission.id && 
+           r.status !== 'completed' && 
+           r.status !== 'cancelled' // Add other terminal statuses if needed
+    ) || 
+    // OR the submission status itself indicates it's pending review (from optimistic update)
+    selectedSubmission.status === 'pending_review'
+  );
+
+  // Move all useColorModeValue hooks to the top
+  const spinnerEmptyColor = useColorModeValue('gray.200', 'gray.700');
+  const bgColor = useColorModeValue('gray.50', 'gray.900');
+  const textColor = useColorModeValue('gray.600', 'gray.300');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const cardBgColor = useColorModeValue('white', 'gray.800');
+  const cardBorderColor = useColorModeValue('gray.100', 'gray.700');
+  const statLabelColor = useColorModeValue('gray.500', 'gray.400');
+  const statNumberColor = useColorModeValue('gray.800', 'white');
+  const feedbackBgColor = useColorModeValue('gray.100', 'gray.700');
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     const token = localStorage.getItem('token');
+    
+    if (!token) {
+      setError('No authentication token found');
+      setLoading(false);
+      return;
+    }
+    
     const headers = { Authorization: `Bearer ${token}` };
 
     try {
       const [submissionsRes, reviewsRes] = await Promise.all([
-        axios.get(API_ENDPOINTS.resumes.getUserSubmissions(user.id), { headers }),
-        axios.get(API_ENDPOINTS.reviews.getUserReviews, { headers })
+        axios.get(API_ENDPOINTS.resumes.getMySubmissions, { headers }),
+        axios.get(API_ENDPOINTS.resumes.getUserReviews, { headers })
       ]);
       
       setSubmissions(submissionsRes.data);
@@ -100,7 +145,11 @@ export default function Dashboard() {
     } catch (err) {
       setError('Failed to fetch dashboard data');
       console.error('Error fetching dashboard data:', err);
-      toast({ title: 'Error', description: 'Could not load dashboard data.', status: 'error' });
+      toast({ 
+        title: 'Error', 
+        description: err.response?.data?.error || 'Could not load dashboard data.', 
+        status: 'error' 
+      });
     } finally {
       setLoading(false);
     }
@@ -108,7 +157,89 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    
+    // Check for payment success
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get('success');
+    const sessionId = urlParams.get('session_id');
+    
+    if (success && sessionId) {
+      const verifyPayment = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await axios.get(
+            API_ENDPOINTS.payments.checkPayment(sessionId),
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          
+          if (response.data.status === 'paid') {
+            // Determine service type from metadata
+            const serviceType = response.data.metadata?.serviceType;
+            let toastDesc = 'Your purchase was successful.';
+
+            if (serviceType === 'review') {
+              toastDesc = 'Your review request has been submitted.';
+            } else if (serviceType === 'ppu_ats' || serviceType === 'ppu_optimization') {
+              toastDesc = 'Your credits have been added to your account.';
+            } else if (serviceType === 'subscription') {
+              toastDesc = 'Your subscription is now active.';
+            }
+            
+            toast({
+              title: 'Payment Successful',
+              description: toastDesc,
+              status: 'success',
+              duration: 5000,
+              isClosable: true,
+            });
+
+            // --- Optimistic UI Updates --- 
+            if (serviceType === 'review') {
+              const resumeId = parseInt(response.data.metadata?.resumeId);
+              if (resumeId) {
+                // Optimistically add to reviewOrders
+                setReviewOrders(prevOrders => [
+                  ...prevOrders,
+                  // Add a placeholder - ensure structure matches fetched data somewhat
+                  { 
+                    resumeId: resumeId, 
+                    status: 'requested', 
+                    submittedDate: new Date().toISOString(), // Use current time as placeholder
+                    // Add other fields expected by the UI if necessary, e.g., resume: null 
+                  }
+                ]);
+                // Optimistically update submission status
+                setSubmissions(prevSubs => 
+                  prevSubs.map(sub => 
+                    sub.id === resumeId ? { ...sub, status: 'pending_review' } : sub
+                  )
+                );
+              }
+            }
+            // --- End Optimistic UI Updates ---
+
+            // Refresh user profile to get updated credits/status
+            await refreshUserProfile(); 
+            fetchData(); // Refresh dashboard data (submissions/reviews)
+          }
+          
+          // Clean up URL parameters
+          window.history.replaceState({}, document.title, '/dashboard');
+        } catch (error) {
+          console.error('Error verifying payment:', error);
+          toast({
+            title: 'Payment Verification Failed',
+            description: 'Please contact support if your credits were not added.',
+            status: 'error',
+            duration: 5000,
+            isClosable: true,
+          });
+        }
+      };
+      
+      verifyPayment();
+    }
+  }, [fetchData, toast, refreshUserProfile]);
 
   const viewFeedback = (submission) => {
     setSelectedSubmission(submission);
@@ -137,7 +268,11 @@ export default function Dashboard() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast({ title: 'Success', description: 'Job description updated.', status: 'success' });
-      fetchData(); 
+      
+      // Update the selected submission state directly to enable the button
+      setSelectedSubmission(prev => prev ? { ...prev, jobDescription: jobDescriptionText } : null);
+      
+      fetchData(); // Also refresh the main list
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to update job description.', status: 'error' });
       console.error("Error updating JD:", error);
@@ -160,14 +295,27 @@ export default function Dashboard() {
               { headers: { Authorization: `Bearer ${token}` } }
           );
           
-          const stripe = await stripePromise;
-          const { error } = await stripe.redirectToCheckout({ sessionId: response.data.sessionId });
-          if (error) {
-              throw new Error(error.message);
-          }
+          // Use the URL directly from the response
+          window.location.href = response.data.url;
+          
+          // Show success message before redirect
+          toast({ 
+            title: 'Payment Initiated', 
+            description: 'Redirecting to payment page...', 
+            status: 'info',
+            duration: 3000,
+            isClosable: true
+          });
       } catch (error) {
-          toast({ title: 'Payment Error', description: error.message || 'Could not initiate payment.', status: 'error' });
+          toast({ 
+            title: 'Payment Error', 
+            description: error.message || 'Could not initiate payment.', 
+            status: 'error',
+            duration: 5000,
+            isClosable: true
+          });
           console.error("Payment initiation error:", error);
+      } finally {
           setIsActionLoading(false);
       }
   };
@@ -182,7 +330,11 @@ export default function Dashboard() {
      try {
         await axios.post(endpoint, {}, { headers: { Authorization: `Bearer ${token}` } });
         toast({ title: 'Analysis Started', description: `Your ${actionType === 'detailed_ats' ? 'Detailed ATS Report' : 'Job Optimization'} is being generated.`, status: 'info' });
-        fetchData();
+        
+        // Refresh user profile to update credits
+        await refreshUserProfile(); 
+        
+        fetchData(); // Refresh submissions/reviews
         onFeedbackModalClose();
         
      } catch (error) {
@@ -273,7 +425,7 @@ export default function Dashboard() {
             size="xl"
             thickness="4px"
             color="#667eea"
-            emptyColor={useColorModeValue('gray.200', 'gray.700')}
+            emptyColor={spinnerEmptyColor}
           />
         </MotionBox>
       </Center>
@@ -285,7 +437,7 @@ export default function Dashboard() {
       width="100vw"
       minH="100vh"
       overflowX="hidden"
-      bg={useColorModeValue('gray.50', 'gray.900')}
+      bg={bgColor}
       position="relative"
     >
       <MotionBox
@@ -352,7 +504,7 @@ export default function Dashboard() {
             </Heading>
             <Text
               fontSize={{ base: "md", md: "lg" }}
-              color={useColorModeValue('gray.600', 'gray.300')}
+              color={textColor}
             >
               Track and manage your resume optimization requests
             </Text>
@@ -378,16 +530,16 @@ export default function Dashboard() {
                   p={{ base: 3, md: 5 }}
                   shadow='md'
                   borderWidth='1px'
-                  borderColor={useColorModeValue('gray.200', 'gray.700')}
+                  borderColor={borderColor}
                   rounded='lg'
-                  bg={useColorModeValue('white', 'gray.800')}
+                  bg={cardBgColor}
                   transition="all 0.2s"
                   _hover={{ shadow: 'lg', transform: 'translateY(-2px)' }}
                 >
                   <StatLabel 
                      fontWeight={'medium'} 
                      isTruncated
-                     color={useColorModeValue('gray.500', 'gray.400')}
+                     color={statLabelColor}
                      fontSize={{base: 'sm', md: 'md'}}
                   >
                       {stat.label}
@@ -395,7 +547,7 @@ export default function Dashboard() {
                   <StatNumber 
                      fontSize={{base: 'xl', md: '2xl'}} 
                      fontWeight={'semibold'}
-                     color={useColorModeValue('gray.800', 'white')}
+                     color={statNumberColor}
                   >
                       {stat.value}
                   </StatNumber>
@@ -406,11 +558,11 @@ export default function Dashboard() {
 
           <MotionBox
             variants={itemVariants}
-            bg={useColorModeValue('white', 'gray.800')}
+            bg={cardBgColor}
             rounded="xl"
             shadow="base"
             border="1px"
-            borderColor={useColorModeValue('gray.100', 'gray.700')}
+            borderColor={cardBorderColor}
             overflow="hidden"
           >
             <Box overflowX="auto">
@@ -458,13 +610,27 @@ export default function Dashboard() {
           </MotionBox>
 
           <MotionBox variants={itemVariants} display="flex" justifyContent="center" gap={4} pt={4}>
-              <Button colorScheme="teal" onClick={() => handlePayment('ppu_ats')}>Buy ATS Credit ($5)</Button>
-              <Button colorScheme="orange" onClick={() => handlePayment('ppu_optimization')}>Buy Optimization Credit ($5)</Button>
+              <Button 
+                colorScheme="teal" 
+                onClick={() => handlePayment('ppu_ats')}
+                isLoading={isActionLoading}
+                loadingText="Processing..."
+              >
+                Buy ATS Credit ($5)
+              </Button>
+              <Button 
+                colorScheme="orange" 
+                onClick={() => handlePayment('ppu_optimization')}
+                isLoading={isActionLoading}
+                loadingText="Processing..."
+              >
+                Buy Optimization Credit ($10)
+              </Button>
           </MotionBox>
         </VStack>
       </Container>
 
-      <Modal isOpen={isFeedbackModalOpen} onClose={onFeedbackModalClose} size="xl" scrollBehavior="inside">
+      <Modal isOpen={isFeedbackModalOpen} onClose={handleFeedbackModalClose} size="xl" scrollBehavior="inside">
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>Resume Details & Actions: {selectedSubmission?.originalFileName}</ModalHeader>
@@ -543,12 +709,19 @@ export default function Dashboard() {
                   <TabPanel>
                     <VStack spacing={4} align="stretch">
                         <Heading size="sm" mb={2}>Run Analysis / Order Review</Heading>
+                        {isUnderReview && (
+                            <Alert status='info' variant='subtle' flexDirection='column' alignItems='center' justifyContent='center' textAlign='center' height='100px'>
+                                <AlertIcon boxSize='40px' mr={0} />
+                                <Text mt={2} fontSize="sm">This resume is currently under professional review.</Text>
+                            </Alert>
+                        )}
                         <Button 
                             leftIcon={<RepeatIcon />} 
                             colorScheme="cyan" 
                             onClick={() => handleTriggerAnalysis('detailed_ats', selectedSubmission.id)}
                             isLoading={isActionLoading}
-                            isDisabled={isActionLoading}
+                            isDisabled={isActionLoading || isUnderReview || (user?.subscriptionStatus !== 'premium' && (!user?.ppuAtsCredits || user.ppuAtsCredits <= 0))}
+                            title={isUnderReview ? 'Resume under review' : (user?.subscriptionStatus !== 'premium' && (!user?.ppuAtsCredits || user.ppuAtsCredits <= 0) ? 'No ATS credits remaining' : '')}
                         >
                             Run Detailed ATS Report {user?.subscriptionStatus !== 'premium' && '(Uses 1 Credit)'}
                         </Button>
@@ -557,8 +730,8 @@ export default function Dashboard() {
                             colorScheme="purple" 
                             onClick={() => handleTriggerAnalysis('job_optimization', selectedSubmission.id)}
                             isLoading={isActionLoading}
-                            isDisabled={isActionLoading || !selectedSubmission.jobDescription}
-                            title={!selectedSubmission.jobDescription ? 'Add job description first' : ''}
+                            isDisabled={isActionLoading || isUnderReview || !selectedSubmission?.jobDescription || (user?.subscriptionStatus !== 'premium' && (!user?.ppuOptimizationCredits || user.ppuOptimizationCredits <= 0))}
+                            title={isUnderReview ? 'Resume under review' : (!selectedSubmission?.jobDescription ? 'Add job description first' : (user?.subscriptionStatus !== 'premium' && (!user?.ppuOptimizationCredits || user.ppuOptimizationCredits <= 0) ? 'No Optimization credits remaining' : ''))}
                         >
                             Run Job Optimization {user?.subscriptionStatus !== 'premium' && '(Uses 1 Credit)'}
                         </Button>
@@ -567,10 +740,19 @@ export default function Dashboard() {
                             colorScheme="teal" 
                             onClick={() => handlePayment('review', selectedSubmission.id)}
                             isLoading={isActionLoading}
-                            isDisabled={isActionLoading || reviewOrders.some(r => r.resumeId === selectedSubmission.id)}
-                            title={reviewOrders.some(r => r.resumeId === selectedSubmission.id) ? 'Review already ordered or in progress' : ''}
+                            isDisabled={isActionLoading || isUnderReview || reviewOrders.some(r => r.resumeId === selectedSubmission.id)}
+                            title={isUnderReview ? 'Resume under review' : (reviewOrders.some(r => r.resumeId === selectedSubmission.id) ? 'Review already ordered or in progress' : '')}
                         >
                             Order Professional Review ($30)
+                        </Button>
+                        <Button 
+                            leftIcon={<EditIcon />} 
+                            colorScheme="yellow" 
+                            onClick={() => navigate(`/resume-editor/${selectedSubmission.id}`)}
+                            isDisabled={isActionLoading || isUnderReview}
+                            title={isUnderReview ? 'Resume under review' : ''}
+                        >
+                            Edit Resume
                         </Button>
                     </VStack>
                   </TabPanel>
@@ -579,7 +761,7 @@ export default function Dashboard() {
             )}
           </ModalBody>
           <ModalFooter>
-            <Button onClick={onFeedbackModalClose}>Close</Button>
+            <Button onClick={handleFeedbackModalClose}>Close</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
@@ -596,7 +778,7 @@ export default function Dashboard() {
                         <Text><strong>Submitted:</strong> {new Date(selectedReview.submittedDate).toLocaleString()}</Text>
                         {selectedReview.completedDate && <Text><strong>Completed:</strong> {new Date(selectedReview.completedDate).toLocaleString()}</Text>}
                         <Heading size="sm" mt={4}>Reviewer Feedback:</Heading>
-                        <Text whiteSpace="pre-wrap" fontFamily="monospace" bg={useColorModeValue('gray.100', 'gray.700')} p={3} borderRadius="md" w="full">
+                        <Text whiteSpace="pre-wrap" fontFamily="monospace" bg={feedbackBgColor} p={3} borderRadius="md" w="full">
                            {selectedReview.reviewerFeedback || 'No feedback provided yet.'}
                         </Text>
                     </VStack>

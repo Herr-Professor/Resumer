@@ -14,6 +14,7 @@ import AdminLogin from './pages/AdminLogin'
 import AboutUs from './pages/AboutUs'
 import TermsOfService from './pages/TermsOfService'
 import PrivacyPolicy from './pages/PrivacyPolicy'
+import ResumeEditor from './pages/ResumeEditor'
 
 // Custom theme with gradients
 const theme = extendTheme({
@@ -168,6 +169,14 @@ function App() {
                   element={
                     <ProtectedRoute adminOnly>
                       <AdminDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/resume-editor/:id"
+                  element={
+                    <ProtectedRoute>
+                      <ResumeEditor />
                     </ProtectedRoute>
                   }
                 />

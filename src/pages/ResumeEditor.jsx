@@ -7,74 +7,75 @@ import {
   Spinner,
   Alert,
   AlertIcon,
-  AlertTitle,
-  AlertDescription,
   Heading,
   Text,
   VStack,
   HStack,
   Tag,
   useToast,
+  Center,
 } from '@chakra-ui/react';
 import axios from 'axios';
-import { useAuth } from '../context/AuthContext'; // Assuming AuthContext provides token
-import apiConfig from '../config/api'; // Assuming apiConfig provides backend URL
+import { useAuth } from '../context/AuthContext';
+import { API_URL, API_ENDPOINTS } from '../config/api';
+import { useParams } from 'react-router-dom';
 
-const API_BASE_URL = apiConfig.baseURL; // Adjust if your config is different
-
-const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
+const ResumeEditor = () => {
+  const { id } = useParams();
   const [editorHtml, setEditorHtml] = useState('');
-  const [isLoadingText, setIsLoadingText] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
-  const { token } = useAuth();
+  const [jobDescriptionExists, setJobDescriptionExists] = useState(false);
+  const { user, token } = useAuth();
   const toast = useToast();
 
-  const fetchText = useCallback(async () => {
-    if (!resumeId || !token) return;
-    setIsLoadingText(true);
+  const fetchData = useCallback(async () => {
+    if (!id || !token) return;
+    setIsLoading(true);
     setError(null);
-    setAnalysisResult(null); // Clear previous analysis on text fetch
+    setAnalysisResult(null);
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/api/resumes/${resumeId}/text`,
-        {
+      const [resumeRes, textRes] = await Promise.all([
+        axios.get(API_ENDPOINTS.resumes.getSingleResume(id), {
           headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      // Quill expects HTML string or Delta object. Backend sends plain text.
-      // For now, wrap in <p> or handle Delta conversion if backend changes.
-      // Simple approach: treat as plain text and let Quill handle it.
-      setEditorHtml(response.data.text || '');
+        }),
+        axios.get(API_ENDPOINTS.resumes.getResumeText(id), {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      ]);
+
+      setJobDescriptionExists(!!resumeRes.data.jobDescription);
+      setEditorHtml(textRes.data.text || '');
     } catch (err) {
-      console.error('Error fetching resume text:', err);
-      setError('Failed to load resume text.');
+      console.error('Error fetching resume data/text:', err);
+      setError('Failed to load resume data.');
       toast({
         title: 'Error',
-        description: 'Could not load resume text.',
+        description: 'Could not load resume data.',
         status: 'error',
         duration: 5000,
         isClosable: true,
       });
     } finally {
-      setIsLoadingText(false);
+      setIsLoading(false);
     }
-  }, [resumeId, token, toast]);
+  }, [id, token, toast]);
 
   useEffect(() => {
-    fetchText();
-  }, [fetchText]);
+    fetchData();
+  }, [fetchData]);
 
   const handleSaveText = async () => {
-    if (!resumeId || !token) return;
+    if (!id || !token) return;
     setIsSaving(true);
     setError(null);
     try {
       await axios.put(
-        `${API_BASE_URL}/api/resumes/${resumeId}/text`,
-        { editedText: editorHtml }, // Send HTML content
+        API_ENDPOINTS.resumes.saveResumeText(id),
+        { editedText: editorHtml },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -105,18 +106,16 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
   };
 
   const handleAnalyzeChanges = async () => {
-    if (!resumeId || !token) return;
+    if (!id || !token) return;
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null);
     try {
-      // Extract plain text from HTML for analysis if needed by backend
-      // This is a basic extraction, might need refinement
       const plainText = new DOMParser().parseFromString(editorHtml, 'text/html').body.textContent || "";
 
       const response = await axios.post(
-        `${API_BASE_URL}/api/resumes/${resumeId}/analyze-changes`,
-        { editedResumeText: plainText }, // Send plain text
+        API_ENDPOINTS.resumes.analyzeChanges(id),
+        { editedResumeText: plainText },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -135,6 +134,9 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
       console.error('Error analyzing changes:', err);
       const errorMsg = err.response?.data?.error || 'Failed to analyze changes.';
       setError(errorMsg);
+      if (err.response?.data?.ppuClicksRemaining === 0) {
+        console.log("Analysis failed: No PPU clicks remaining.");
+      }
       toast({
         title: 'Analysis Failed',
         description: errorMsg,
@@ -147,7 +149,6 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
     }
   };
 
-  // Quill modules and formats can be customized if needed
   const modules = {
     toolbar: [
       [{ 'header': '1'}, {'header': '2'}, { 'font': [] }],
@@ -155,7 +156,7 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
       ['bold', 'italic', 'underline', 'strike', 'blockquote'],
       [{'list': 'ordered'}, {'list': 'bullet'},
        {'indent': '-1'}, {'indent': '+1'}],
-      ['link', 'image', 'video'], // Consider removing image/video if not applicable
+      ['link'],
       ['clean']
     ],
   };
@@ -164,13 +165,20 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
     'header', 'font', 'size',
     'bold', 'italic', 'underline', 'strike', 'blockquote',
     'list', 'bullet', 'indent',
-    'link', 'image', 'video'
+    'link'
   ];
 
+  if (isLoading) {
+    return (
+      <Center h="400px">
+        <Spinner size="xl" />
+      </Center>
+    );
+  }
 
   return (
-    <Box>
-      {isLoadingText && <Spinner />}
+    <Box p={4}>
+      <Heading size="lg" mb={4}>Edit Resume</Heading>
       {error && (
         <Alert status="error" mb={4}>
           <AlertIcon />
@@ -178,22 +186,24 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
         </Alert>
       )}
 
-      <ReactQuill
-        theme="snow"
-        value={editorHtml}
-        onChange={setEditorHtml}
-        modules={modules}
-        formats={formats}
-        style={{ height: '400px', marginBottom: '50px' }} // Adjust height as needed
-        readOnly={isLoadingText}
-      />
+      <Box mb={6} h="400px">
+        <ReactQuill
+          theme="snow"
+          value={editorHtml}
+          onChange={setEditorHtml}
+          modules={modules}
+          formats={formats}
+          style={{ height: '100%' }}
+          readOnly={isSaving || isAnalyzing}
+        />
+      </Box>
 
-      <HStack mt={10} spacing={4}>
+      <HStack spacing={4}>
         <Button
             onClick={handleSaveText}
             isLoading={isSaving}
             colorScheme="blue"
-            isDisabled={isLoadingText}
+            isDisabled={isAnalyzing}
         >
             Save Text
         </Button>
@@ -201,10 +211,10 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
             onClick={handleAnalyzeChanges}
             isLoading={isAnalyzing}
             colorScheme="green"
-            isDisabled={isLoadingText || !jobDescriptionExists || isSaving} // Disable if no JD or currently saving
-            title={!jobDescriptionExists ? "Add a Job Description first to enable analysis" : ""}
+            isDisabled={!jobDescriptionExists || isSaving}
+            title={!jobDescriptionExists ? "Add a Job Description on the dashboard first to enable analysis" : ""}
         >
-            Analyze Changes
+            Analyze Changes {user?.subscriptionStatus !== 'premium' && '(Uses 1 Click)'}
         </Button>
       </HStack>
 
@@ -213,8 +223,8 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
       {analysisResult && (
         <Box mt={6} p={4} borderWidth="1px" borderRadius="md" borderColor="gray.200">
           <Heading size="md" mb={3}>Analysis Results</Heading>
-          <Text mb={1}><b>Optimization Score:</b> {analysisResult.optimizationScore?.toFixed(1) ?? 'N/A'} / 10</Text>
-           {analysisResult.ppuClicksRemaining !== undefined && (
+          <Text mb={1}><b>Optimization Score:</b> {analysisResult.optimizationScore?.toFixed(1) ?? 'N/A'} / 100</Text>
+           {analysisResult.ppuClicksRemaining !== null && analysisResult.ppuClicksRemaining !== undefined && (
              <Text mb={3} fontSize="sm" color="blue.500">
                (PPU Clicks Remaining for this Optimization: {analysisResult.ppuClicksRemaining})
              </Text>
@@ -223,8 +233,8 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
           <Box mb={3}>
             <Heading size="sm" mb={1}>Matched Keywords:</Heading>
             {analysisResult.keywordAnalysis?.matchedKeywords?.length > 0 ? (
-              <HStack wrap="wrap">
-                {analysisResult.keywordAnalysis.matchedKeywords.map((kw, i) => <Tag key={i} colorScheme="green">{kw}</Tag>)}
+              <HStack wrap="wrap" spacing={2}>
+                {analysisResult.keywordAnalysis.matchedKeywords.map((kw, i) => <Tag key={i} colorScheme="green" size="md">{kw}</Tag>)}
               </HStack>
             ) : (<Text fontSize="sm">None found.</Text>)}
           </Box>
@@ -232,8 +242,8 @@ const ResumeEditor = ({ resumeId, jobDescriptionExists }) => {
           <Box mb={3}>
             <Heading size="sm" mb={1}>Missing Keywords:</Heading>
              {analysisResult.keywordAnalysis?.missingKeywords?.length > 0 ? (
-              <HStack wrap="wrap">
-                {analysisResult.keywordAnalysis.missingKeywords.map((kw, i) => <Tag key={i} colorScheme="red">{kw}</Tag>)}
+              <HStack wrap="wrap" spacing={2}>
+                {analysisResult.keywordAnalysis.missingKeywords.map((kw, i) => <Tag key={i} colorScheme="red" size="md">{kw}</Tag>)}
               </HStack>
             ) : (<Text fontSize="sm">None missing!</Text>)}
           </Box>

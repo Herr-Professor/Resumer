@@ -1,4 +1,4 @@
-export const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000';
 export const API_ENDPOINTS = {
   auth: {
     register: `${API_URL}/api/auth/register`,
@@ -21,7 +21,8 @@ export const API_ENDPOINTS = {
     downloadAuthOptimized: (id) => `${API_URL}/api/resumes/${id}/download-optimized`,
   },
   payments: {
-    createCheckout: `${API_URL}/api/payments/create-checkout-session`,
+    createCheckout: `${API_URL}/api/payment/create-checkout-session`,
+    checkPayment: (sessionId) => `${API_URL}/api/payment/check-payment/${sessionId}`,
   },
   admin: {
     getAllSubmissions: `${API_URL}/api/admin/submissions`,

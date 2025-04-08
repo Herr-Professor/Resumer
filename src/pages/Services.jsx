@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Box,
     Container,
@@ -26,7 +26,7 @@ import {
   const MotionBox = motion(Box)
   
   // Load Stripe
-  const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY || 'pk_test_YOUR_PUBLIC_KEY')
+  const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_YOUR_PUBLIC_KEY')
   
   export default function Services() {
     const { user, loading: authLoading } = useAuth()
@@ -78,11 +78,11 @@ import {
       },
       {
         title: 'Pay-Per-Use (PPU)',
-        price: '$5 / report or optimization',
+        price: '$5 / report or $10 / optimization',
         description: 'Optimize specific resumes as needed.',
         features: [
           'Detailed ATS Report ($5 each)',
-          'Job-Specific Optimization ($5 each)',
+          'Job-Specific Optimization ($10 each)',
           'Includes limited analysis clicks per purchase (3-5)',
           'Ideal for occasional users',
         ],
@@ -149,6 +149,49 @@ import {
         setIsLoadingPayment(null)
       }
     }
+  
+    useEffect(() => {
+      // Check for payment success
+      const urlParams = new URLSearchParams(window.location.search);
+      const success = urlParams.get('success');
+      const sessionId = urlParams.get('session_id');
+      
+      if (success && sessionId) {
+        const verifyPayment = async () => {
+          try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(
+              `${API_ENDPOINTS.payments.checkPayment(sessionId)}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            
+            if (response.data.status === 'paid') {
+              toast({
+                title: 'Payment Successful',
+                description: 'Your credits have been added to your account.',
+                status: 'success',
+                duration: 5000,
+                isClosable: true,
+              });
+            }
+            
+            // Clean up URL parameters
+            window.history.replaceState({}, document.title, '/services');
+          } catch (error) {
+            console.error('Error verifying payment:', error);
+            toast({
+              title: 'Payment Verification Failed',
+              description: 'Please contact support if your credits were not added.',
+              status: 'error',
+              duration: 5000,
+              isClosable: true,
+            });
+          }
+        };
+        
+        verifyPayment();
+      }
+    }, [toast]);
   
     return (
       <Box
@@ -338,7 +381,7 @@ import {
                               isDisabled={authLoading || !!isLoadingPayment}
                               onClick={() => handlePayment('ppu_optimization')}
                             >
-                              Buy Optimization Credit ($5)
+                              Buy Optimization Credit ($10)
                             </Button>
                           </VStack>
                         ) : (
