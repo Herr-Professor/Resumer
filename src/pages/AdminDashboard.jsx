@@ -41,7 +41,7 @@ import {
 } from '@chakra-ui/react';
 import { ChevronDownIcon, DownloadIcon, RepeatIcon } from '@chakra-ui/icons';
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { API_ENDPOINTS, API_URL } from '../config/api';
 
@@ -50,60 +50,65 @@ const MotionContainer = motion(Container);
 
 export default function AdminDashboard() {
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [selectedReviewOrder, setSelectedReviewOrder] = useState(null);
   const [feedback, setFeedback] = useState('');
-  const [submissions, setSubmissions] = useState([]);
+  const [reviewOrders, setReviewOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const toast = useToast();
 
-  const fetchSubmissions = async () => {
+  const fetchReviewOrders = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
       const response = await axios.get(
-        API_ENDPOINTS.admin.getAllSubmissions,
+        API_ENDPOINTS.admin.getAllReviews,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
       );
-      setSubmissions(response.data);
+      setReviewOrders(response.data.reviewOrders || []);
     } catch (err) {
-      setError('Failed to fetch submissions');
-      console.error('Error fetching submissions:', err);
+      const errorMsg = err.response?.data?.error || 'Failed to fetch review orders';
+      setError(errorMsg);
+      toast({ title: 'Error', description: errorMsg, status: 'error' });
+      console.error('Error fetching review orders:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
-    fetchSubmissions();
-  }, []);
+    fetchReviewOrders();
+  }, [fetchReviewOrders]);
 
   const calculateStats = () => {
-    const total = submissions.length;
-    const pending = submissions.filter(s => s.status === 'pending').length;
-    const inProgress = submissions.filter(s => s.status === 'in-progress').length;
-    const completed = submissions.filter(s => s.status === 'completed').length;
-    const totalRevenue = submissions.reduce((acc, curr) => acc + (curr.price || 0), 0);
-    
-    // Calculate average response time in hours
-    const completedSubmissions = submissions.filter(s => s.status === 'completed' && s.completedAt);
-    const avgResponseTime = completedSubmissions.length > 0
-      ? completedSubmissions.reduce((acc, curr) => {
-          const submittedDate = new Date(curr.submittedAt);
-          const completedDate = new Date(curr.completedAt);
-          return acc + (completedDate - submittedDate) / (1000 * 60 * 60);
-        }, 0) / completedSubmissions.length
+    const total = reviewOrders.length;
+    const pending = reviewOrders.filter(r => r.status === 'requested' || r.status === 'assigned').length;
+    const inProgress = reviewOrders.filter(r => r.status === 'in_progress').length;
+    const completed = reviewOrders.filter(r => r.status === 'completed').length;
+    const totalRevenue = completed * 30; // Assuming $30 per completed review
+
+    // Average response time for completed reviews
+    const completedReviewsWithDates = reviewOrders.filter(
+      r => r.status === 'completed' && r.completedDate && r.submittedDate
+    );
+    const avgResponseTimeMs = completedReviewsWithDates.length > 0
+      ? completedReviewsWithDates.reduce((acc, curr) => {
+          const submitted = new Date(curr.submittedDate).getTime();
+          const completed = new Date(curr.completedDate).getTime();
+          return acc + (completed - submitted);
+        }, 0) / completedReviewsWithDates.length
       : 0;
+    const avgResponseTimeHours = Math.round(avgResponseTimeMs / (1000 * 60 * 60));
 
     return [
-      { label: 'Total Submissions', value: total.toString() },
+      { label: 'Total Reviews', value: total.toString() },
       { label: 'Pending Review', value: pending.toString() },
       { label: 'In Progress', value: inProgress.toString() },
       { label: 'Completed', value: completed.toString() },
       { label: 'Total Revenue', value: `$${totalRevenue.toFixed(2)}` },
-      { label: 'Avg. Response Time', value: `${Math.round(avgResponseTime)}h` }
+      { label: 'Avg. Response Time', value: `${avgResponseTimeHours}h` }
     ];
   };
 
@@ -112,25 +117,28 @@ export default function AdminDashboard() {
       case 'completed':
         return 'green';
       case 'in-progress':
+      case 'assigned':
         return 'yellow';
       case 'pending':
+      case 'requested':
         return 'gray';
       default:
         return 'gray';
     }
   };
 
-  const handleStatusChange = async (submission, newStatus) => {
+  const handleStatusChange = async (reviewOrder, newStatus) => {
     try {
       const token = localStorage.getItem('token');
       if (newStatus === 'completed') {
-        setSelectedSubmission(submission);
+        setSelectedReviewOrder(reviewOrder);
+        setFeedback(reviewOrder.reviewerFeedback || '');
         onOpen();
         return;
       }
 
       await axios.put(
-        API_ENDPOINTS.admin.updateSubmission(submission.id),
+        API_ENDPOINTS.admin.updateReview(reviewOrder.id),
         { status: newStatus },
         {
           headers: { Authorization: `Bearer ${token}` }
@@ -138,14 +146,14 @@ export default function AdminDashboard() {
       );
 
       toast({
-        title: 'Status Updated',
-        description: `Status changed to ${newStatus}`,
+        title: 'Review Completed',
+        description: `Review status changed to ${newStatus}`,
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
 
-      fetchSubmissions();
+      fetchReviewOrders();
     } catch (err) {
       toast({
         title: 'Error',
@@ -154,18 +162,20 @@ export default function AdminDashboard() {
         duration: 3000,
         isClosable: true,
       });
+      console.error("Status update error:", err);
     }
   };
 
   const handleSubmitFeedback = async () => {
+    if (!selectedReviewOrder) return;
+
     try {
       const token = localStorage.getItem('token');
       await axios.put(
-        API_ENDPOINTS.admin.updateSubmission(selectedSubmission.id),
+        API_ENDPOINTS.admin.updateReview(selectedReviewOrder.id),
         {
           status: 'completed',
-          feedback,
-          completedAt: new Date().toISOString()
+          reviewerFeedback: feedback,
         },
         {
           headers: { Authorization: `Bearer ${token}` }
@@ -173,8 +183,8 @@ export default function AdminDashboard() {
       );
 
       toast({
-        title: 'Feedback Submitted',
-        description: 'Status updated and feedback submitted successfully',
+        title: 'Review Completed',
+        description: 'Status set to completed and feedback submitted.',
         status: 'success',
         duration: 3000,
         isClosable: true,
@@ -182,7 +192,8 @@ export default function AdminDashboard() {
 
       onClose();
       setFeedback('');
-      fetchSubmissions();
+      setSelectedReviewOrder(null);
+      fetchReviewOrders();
     } catch (err) {
       toast({
         title: 'Error',
@@ -191,13 +202,17 @@ export default function AdminDashboard() {
         duration: 3000,
         isClosable: true,
       });
+      console.error("Feedback submission error:", err);
     }
   };
 
-  const handleDownloadOriginal = async (submission) => {
+  const handleDownloadOriginal = async (reviewOrder) => {
+    if (!reviewOrder?.resume?.id) return;
+    const resumeId = reviewOrder.resume.id;
+    const originalFileName = reviewOrder.resume.originalFileName || `resume-${resumeId}.pdf`;
     try {
       const response = await axios.get(
-        `${API_URL}/api/admin/submissions/${submission.id}/download-original`,
+        API_ENDPOINTS.admin.downloadOriginal(resumeId),
         {
           responseType: 'blob',
           headers: {
@@ -209,7 +224,7 @@ export default function AdminDashboard() {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', submission.originalFileName);
+      link.setAttribute('download', originalFileName);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -224,10 +239,17 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDownloadOptimized = async (submission) => {
+  const handleDownloadOptimized = async (reviewOrder) => {
+    if (!reviewOrder?.resume?.id || !reviewOrder?.resume?.optimizedResume) {
+        toast({ title: 'Not Available', description: 'Optimized resume not found for this review.', status: 'info' });
+        return;
+    }
+    const resumeId = reviewOrder.resume.id;
+    const originalFileName = reviewOrder.resume.originalFileName || `resume-${resumeId}.pdf`;
+    
     try {
       const response = await axios.get(
-        `${API_URL}/api/admin/submissions/${submission.id}/download-optimized`,
+        API_ENDPOINTS.admin.downloadOptimized(resumeId),
         {
           responseType: 'blob',
           headers: {
@@ -239,7 +261,7 @@ export default function AdminDashboard() {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `optimized-${submission.originalFileName}`);
+      link.setAttribute('download', `optimized-${originalFileName}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -254,15 +276,16 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUploadOptimized = async (submission, file) => {
+  const handleUploadOptimized = async (reviewOrder, file) => {
+    if (!reviewOrder?.resume?.id || !file) return;
+    const resumeId = reviewOrder.resume.id;
+
     try {
       const formData = new FormData();
       formData.append('optimizedResume', file);
-      formData.append('status', 'completed');
-      formData.append('feedback', feedback);
 
       const response = await axios.put(
-        `${API_URL}/api/admin/submissions/${submission.id}`,
+        API_ENDPOINTS.admin.updateSubmission(resumeId),
         formData,
         {
           headers: {
@@ -273,15 +296,14 @@ export default function AdminDashboard() {
       );
 
       toast({
-        title: 'Upload successful',
-        description: 'Optimized resume has been uploaded',
+        title: 'Optimized resume uploaded successfully.',
+        description: 'Optimized resume uploaded successfully.',
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
 
-      fetchSubmissions();
-      onClose();
+      fetchReviewOrders();
     } catch (error) {
       toast({
         title: 'Upload failed',
@@ -290,6 +312,7 @@ export default function AdminDashboard() {
         duration: 3000,
         isClosable: true,
       });
+      console.error("Optimized upload error:", error);
     }
   };
 
@@ -433,16 +456,13 @@ export default function AdminDashboard() {
                     >
                       {stat.value}
                     </StatNumber>
-                    <StatHelpText fontSize={{ base: 'xs', md: 'sm' }}>
-                      Last 30 days
-                    </StatHelpText>
                   </Stat>
                 </Box>
               </MotionBox>
             ))}
           </SimpleGrid>
 
-          {/* Submissions Table */}
+          {/* Review Orders Table */}
           <MotionBox
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -459,38 +479,36 @@ export default function AdminDashboard() {
                 <Thead bg={useColorModeValue('gray.50', 'gray.900')}>
                   <Tr>
                     <Th fontSize={{ base: 'xs', md: 'sm' }}>User</Th>
-                    <Th fontSize={{ base: 'xs', md: 'sm' }}>File Name</Th>
-                    <Th fontSize={{ base: 'xs', md: 'sm' }}>Submission Date</Th>
-                    <Th fontSize={{ base: 'xs', md: 'sm' }}>Plan</Th>
+                    <Th fontSize={{ base: 'xs', md: 'sm' }}>Resume File</Th>
+                    <Th fontSize={{ base: 'xs', md: 'sm' }}>Review Requested</Th>
                     <Th fontSize={{ base: 'xs', md: 'sm' }}>Status</Th>
                     <Th fontSize={{ base: 'xs', md: 'sm' }}>Actions</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {submissions.map((submission) => (
-                    <Tr key={submission.id}>
+                  {reviewOrders.map((reviewOrder) => (
+                    <Tr key={reviewOrder.id}>
                       <Td fontSize={{ base: 'sm', md: 'md' }}>
                         <VStack align="start" spacing={1}>
-                          <Text fontWeight="medium">{submission.user.name}</Text>
+                          <Text fontWeight="medium">{reviewOrder.user?.name || 'N/A'}</Text>
                           <Text fontSize="sm" color="gray.500">
-                            {submission.user.email}
+                            {reviewOrder.user?.email || 'N/A'}
                           </Text>
                         </VStack>
                       </Td>
-                      <Td fontSize={{ base: 'sm', md: 'md' }}>{submission.originalFileName}</Td>
+                      <Td fontSize={{ base: 'sm', md: 'md' }}>{reviewOrder.resume?.originalFileName || 'N/A'}</Td>
                       <Td fontSize={{ base: 'sm', md: 'md' }}>
-                        {new Date(submission.submittedAt).toLocaleDateString()}
+                        {new Date(reviewOrder.submittedDate).toLocaleDateString()}
                       </Td>
-                      <Td fontSize={{ base: 'sm', md: 'md' }}>{submission.plan}</Td>
                       <Td>
                         <Badge
-                          colorScheme={getStatusColor(submission.status)}
+                          colorScheme={getStatusColor(reviewOrder.status)}
                           px={3}
                           py={1}
                           rounded="full"
                           fontSize={{ base: 'xs', md: 'sm' }}
                         >
-                          {submission.status.replace('-', ' ')}
+                          {reviewOrder.status.replace('_', ' ')}
                         </Badge>
                       </Td>
                       <Td>
@@ -512,21 +530,27 @@ export default function AdminDashboard() {
                               Update Status
                             </MenuButton>
                             <MenuList>
-                              <MenuItem onClick={() => handleStatusChange(submission, 'pending')}>
-                                Pending
+                              <MenuItem onClick={() => handleStatusChange(reviewOrder, 'requested')}>
+                                Requested
                               </MenuItem>
-                              <MenuItem onClick={() => handleStatusChange(submission, 'in-progress')}>
+                              <MenuItem onClick={() => handleStatusChange(reviewOrder, 'assigned')}>
+                                Assigned
+                              </MenuItem>
+                              <MenuItem onClick={() => handleStatusChange(reviewOrder, 'in_progress')}>
                                 In Progress
                               </MenuItem>
-                              <MenuItem onClick={() => handleStatusChange(submission, 'completed')}>
+                              <MenuItem onClick={() => handleStatusChange(reviewOrder, 'completed')}>
                                 Completed
+                              </MenuItem>
+                              <MenuItem onClick={() => handleStatusChange(reviewOrder, 'cancelled')}>
+                                Cancelled
                               </MenuItem>
                             </MenuList>
                           </Menu>
                           <Button
                             size={{ base: 'sm', md: 'md' }}
                             leftIcon={<DownloadIcon />}
-                            onClick={() => handleDownloadOriginal(submission)}
+                            onClick={() => handleDownloadOriginal(reviewOrder)}
                             variant="outline"
                             borderColor="#667eea"
                             color="#667eea"
@@ -539,8 +563,8 @@ export default function AdminDashboard() {
                           <Button
                             size={{ base: 'sm', md: 'md' }}
                             leftIcon={<DownloadIcon />}
-                            onClick={() => handleDownloadOptimized(submission)}
-                            isDisabled={!submission.optimizedResume}
+                            onClick={() => handleDownloadOptimized(reviewOrder)}
+                            isDisabled={!reviewOrder.resume?.optimizedResume}
                             variant="outline"
                             borderColor="#764ba2"
                             color="#764ba2"

@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import {
     Box,
     Container,
@@ -10,71 +11,150 @@ import {
     Button,
     VStack,
     useColorModeValue,
+    Icon,
+    Divider,
+    useToast,
   } from '@chakra-ui/react'
-  import { CheckCircleIcon } from '@chakra-ui/icons'
-  import { Link } from 'react-router-dom'
+  import { CheckCircleIcon, StarIcon, InfoOutlineIcon, LockIcon } from '@chakra-ui/icons'
+  import { Link, useNavigate } from 'react-router-dom'
   import { motion } from 'framer-motion'
+  import { useAuth } from '../context/AuthContext'
+  import axios from 'axios'
+  import { API_ENDPOINTS } from '../config/api'
+  import { loadStripe } from '@stripe/stripe-js'
   
   const MotionBox = motion(Box)
   
+  // Load Stripe
+  const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY || 'pk_test_YOUR_PUBLIC_KEY')
+  
   export default function Services() {
-    const services = [
+    const { user, loading: authLoading } = useAuth()
+    const navigate = useNavigate()
+    const toast = useToast()
+    const [isLoadingPayment, setIsLoadingPayment] = useState(null)
+  
+    const bgColor = useColorModeValue('gray.50', 'gray.900')
+    const cardBg = useColorModeValue('white', 'gray.800')
+    const borderColor = useColorModeValue('gray.100', 'gray.700')
+    const textColor = useColorModeValue('gray.600', 'gray.300')
+    const accentColor = useColorModeValue('purple.600', 'purple.300')
+  
+    // Define Tiers based on Resopt.txt
+    const tiers = [
       {
-        title: 'Basic Resume Edit',
-        price: '$5',
-        description: 'Perfect for a quick touch-up',
+        title: 'Free Tier',
+        price: '$0',
+        description: 'Get started and see basic ATS compatibility.',
         features: [
-          'Grammar and spelling check',
-          'Basic formatting optimization',
-          'Structure improvements',
-          '24-hour delivery',
-          'One revision included'
-        ]
+          'Account Sign-up',
+          'Resume Upload (PDF, DOCX)',
+          'Basic ATS Check & Score',
+          'General ATS Feedback',
+        ],
+        ctaText: 'Get Started',
+        ctaAction: () => navigate('/register'),
+        serviceType: null,
+        requiresLogin: false,
+        isCurrent: !user,
       },
       {
-        title: 'Premium Resume Edit',
-        price: '$10',
-        description: 'Comprehensive optimization',
+        title: 'Premium Subscription',
+        price: '$15 / month',
+        description: 'Unlimited access for active job seekers.',
         features: [
-          'Includes all Basic Edit features',
-          'ATS keyword optimization',
-          'Content restructuring',
-          'Industry-specific suggestions',
-          'Career coaching tips',
-          'Two revisions included'
-        ]
+          'All Free Tier features',
+          'Unlimited Detailed ATS Reports (AI-Powered)',
+          'Unlimited Job-Specific Optimizations (AI-Powered)',
+          'Unlimited AI Analysis clicks in Editor',
+          '(Potentially) Store multiple resume versions',
+          'Cancel Anytime',
+        ],
+        ctaText: user?.subscriptionStatus === 'premium' ? 'Currently Subscribed' : 'Go Premium',
+        ctaAction: () => handlePayment('subscription'),
+        serviceType: 'subscription',
+        requiresLogin: true,
+        isCurrent: user?.subscriptionStatus === 'premium',
       },
       {
-        title: 'Urgent Resume Edit',
-        price: '$25',
-        description: 'Need it fast? We\'ve got you covered',
+        title: 'Pay-Per-Use (PPU)',
+        price: '$5 / report or optimization',
+        description: 'Optimize specific resumes as needed.',
         features: [
-          'Includes all Premium Edit features',
-          'Same-day delivery',
-          'Priority support',
-          'Three revisions included',
-          'Emergency weekend service'
-        ]
+          'Detailed ATS Report ($5 each)',
+          'Job-Specific Optimization ($5 each)',
+          'Includes limited analysis clicks per purchase (3-5)',
+          'Ideal for occasional users',
+        ],
+        ctaText: 'Buy Credits on Dashboard',
+        ctaAction: () => navigate('/dashboard'),
+        serviceType: null,
+        requiresLogin: true,
+        isCurrent: false,
       },
       {
-        title: 'Job Application Service',
-        price: '$150',
-        description: 'Complete job application management for one week',
+        title: 'Professional Review',
+        price: '$30 / review',
+        description: 'Personalized feedback from a human expert.',
         features: [
-          'Based on your optimized resume',
-          'Tailored applications for job descriptions',
-          'Cover letter writing (if required)',
-          'Submission of applications',
-          'Monitoring and follow-up'
-        ]
-      }
+          'Manual review by a qualified expert',
+          'Focus on clarity, impact, strategy',
+          'Complements AI analysis',
+          'Actionable written feedback (1-2 business days)',
+        ],
+        ctaText: 'Order on Dashboard',
+        ctaAction: () => navigate('/dashboard'),
+        serviceType: 'review',
+        requiresLogin: true,
+        isCurrent: false,
+      },
     ]
+  
+    const handlePayment = async (serviceType, resumeId = null) => {
+      if (!user) {
+        toast({ title: 'Login Required', description: 'Please log in or sign up to make a purchase.', status: 'warning' })
+        navigate('/login')
+        return
+      }
+  
+      setIsLoadingPayment(serviceType)
+      const token = localStorage.getItem('token')
+      try {
+        const payload = { serviceType, userId: user.id }
+        if (resumeId) {
+          payload.resumeId = resumeId
+        }
+        const response = await axios.post(
+          API_ENDPOINTS.payments.createCheckout,
+          payload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+  
+        const stripe = await stripePromise
+        if (response.data.url) {
+          window.location.href = response.data.url
+        } else {
+          throw new Error('Checkout URL not received from server.')
+        }
+  
+      } catch (error) {
+        toast({
+          title: 'Payment Error',
+          description: error.response?.data?.error || error.message || 'Could not initiate payment process.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        })
+        console.error("Payment initiation error:", error)
+        setIsLoadingPayment(null)
+      }
+    }
   
     return (
       <Box
         width="100vw"
         minH="100vh"
-        bg={useColorModeValue('gray.50', 'gray.900')}
+        bg={bgColor}
         py={{ base: 12, md: 20 }}
         overflow="hidden"
         position="relative"
@@ -117,114 +197,115 @@ import {
           }}
         />
   
-        <Container maxW={{ base: "100%", md: "90%", lg: "80%" }} px={{ base: 4, md: 8 }} position="relative">
-          <VStack spacing={{ base: 6, md: 10 }} align="stretch">
+        <Container maxW={{ base: "100%", md: "90%", lg: "80%", xl: "1200px" }} px={{ base: 4, md: 8 }} position="relative">
+          <VStack spacing={{ base: 8, md: 12 }} align="stretch">
             <Box textAlign="center">
               <Heading
                 as={motion.h1}
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                fontSize={{ base: '2xl', sm: '4xl', md: '5xl', lg: '6xl' }}
-                mb={{ base: 2, md: 3 }}
+                fontSize={{ base: '2xl', sm: '4xl', md: '5xl' }}
+                mb={3}
                 bgGradient="linear(to-r, #667eea, #764ba2)"
                 bgClip="text"
                 lineHeight={{ base: "120%", md: "110%" }}
               >
-                Our Resume Optimization Services
+                Choose Your Plan
               </Heading>
               <Text
-                fontSize={{ base: 'md', md: 'lg', lg: 'xl' }}
-                color={useColorModeValue('gray.500', 'gray.300')}
+                fontSize={{ base: 'md', md: 'lg' }}
+                color={textColor}
                 as={motion.p}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.2, duration: 0.5 }}
-                maxW={{ base: "100%", md: "90%", lg: "80%" }}
+                maxW={{ base: "100%", md: "80%" }}
                 mx="auto"
               >
-                Choose the perfect plan to enhance your career prospects
+                Select the option that best fits your job search needs, from free basic checks to unlimited AI-powered optimization and expert reviews.
               </Text>
             </Box>
   
             <SimpleGrid
-              columns={{ base: 1, md: 2, xl: 4 }}
-              spacing={{ base: 4, md: 6, lg: 8 }}
+              columns={{ base: 1, md: 2, lg: 4 }}
+              spacing={{ base: 6, md: 8 }}
               as={motion.div}
               variants={{
                 hidden: { opacity: 0 },
                 show: {
                   opacity: 1,
                   transition: {
-                    staggerChildren: 0.2
+                    staggerChildren: 0.15
                   }
                 }
               }}
               initial="hidden"
               animate="show"
             >
-              {services.map((service) => (
+              {tiers.map((tier) => (
                 <MotionBox
-                  key={service.title}
+                  key={tier.title}
                   variants={{
                     hidden: { opacity: 0, y: 20 },
                     show: { opacity: 1, y: 0 }
                   }}
                 >
                   <Box
-                    bg={useColorModeValue('white', 'gray.800')}
-                    p={{ base: 4, md: 6, lg: 8 }}
+                    bg={cardBg}
+                    p={{ base: 5, md: 6 }}
                     rounded="xl"
                     shadow="base"
                     borderWidth="1px"
-                    borderColor={useColorModeValue('gray.100', 'gray.700')}
+                    borderColor={tier.isCurrent ? accentColor : borderColor}
                     h="full"
                     display="flex"
                     flexDirection="column"
-                    whileHover={{
-                      y: -5,
-                      boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-                      transition: { duration: 0.2 }
+                    transition="all 0.2s"
+                    _hover={{
+                      transform: 'translateY(-4px)',
+                      shadow: 'lg',
                     }}
                   >
-                    <VStack spacing={{ base: 3, md: 4 }} align="stretch" flex="1">
-                      <Box>
-                        <Text
+                    <VStack spacing={4} align="stretch" flex="1">
+                      <Box textAlign="center">
+                        <Heading
                           fontSize={{ base: 'xl', md: '2xl' }}
-                          fontWeight="bold"
-                          bgGradient="linear(to-r, #667eea, #764ba2)"
-                          bgClip="text"
+                          fontWeight="semibold"
+                          color={tier.isCurrent ? accentColor : undefined}
                         >
-                          {service.title}
-                        </Text>
-                        <Text 
-                          fontSize={{ base: '2xl', md: '3xl', lg: '4xl' }} 
+                          {tier.title}
+                        </Heading>
+                        <Text
+                          fontSize={{ base: '2xl', md: '3xl' }}
                           fontWeight="bold"
                           mt={2}
                         >
-                          {service.price}
+                          {tier.price}
                         </Text>
-                        <Text 
-                          color="gray.500"
-                          fontSize={{ base: "xs", md: "sm", lg: "md" }}
+                        <Text
+                          color={textColor}
+                          fontSize={{ base: "sm", md: "md" }}
                           mt={2}
+                          minHeight={{ base: "40px", md: "60px"}}
                         >
-                          {service.description}
+                          {tier.description}
                         </Text>
                       </Box>
   
-                      <List spacing={{ base: 2, md: 3 }} flex="1" mt={4}>
-                        {service.features.map((feature) => (
-                          <ListItem 
-                            key={feature} 
-                            fontSize={{ base: "xs", md: "sm", lg: "md" }}
+                      <Divider />
+  
+                      <List spacing={2} flex="1" mt={4} fontSize={{ base: "sm", md: "md" }}>
+                        {tier.features.map((feature) => (
+                          <ListItem
+                            key={feature}
                             display="flex"
                             alignItems="center"
                           >
-                            <ListIcon 
-                              as={CheckCircleIcon} 
+                            <ListIcon
+                              as={CheckCircleIcon}
                               color="green.500"
-                              fontSize={{ base: "sm", md: "md", lg: "lg" }}
+                              fontSize={{ base: "md", md: "lg" }}
                               mr={2}
                             />
                             {feature}
@@ -232,23 +313,50 @@ import {
                         ))}
                       </List>
   
-                      <Link to="/upload" style={{ width: '100%', marginTop: 'auto' }}>
-                        <Button
-                          w="100%"
-                          rounded="full"
-                          size={{ base: "sm", md: "md", lg: "lg" }}
-                          bg="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                          color="white"
-                          _hover={{
-                            transform: 'translateY(-2px)',
-                            boxShadow: 'lg',
-                            bg: "linear-gradient(135deg, #764ba2 0%, #667eea 100%)"
-                          }}
-                          transition="all 0.2s"
-                        >
-                          Choose {service.title}
-                        </Button>
-                      </Link>
+                      <Box mt="auto" pt={4}>
+                        {tier.title === 'Pay-Per-Use (PPU)' ? (
+                          <VStack spacing={3}>
+                            <Button
+                              w="100%"
+                              rounded="md"
+                              size="md"
+                              variant="outline"
+                              colorScheme="blue"
+                              isLoading={isLoadingPayment === 'ppu_ats'}
+                              isDisabled={authLoading || !!isLoadingPayment}
+                              onClick={() => handlePayment('ppu_ats')}
+                            >
+                              Buy ATS Report Credit ($5)
+                            </Button>
+                            <Button
+                              w="100%"
+                              rounded="md"
+                              size="md"
+                              variant="outline"
+                              colorScheme="orange"
+                              isLoading={isLoadingPayment === 'ppu_optimization'}
+                              isDisabled={authLoading || !!isLoadingPayment}
+                              onClick={() => handlePayment('ppu_optimization')}
+                            >
+                              Buy Optimization Credit ($5)
+                            </Button>
+                          </VStack>
+                        ) : (
+                          <Button
+                            w="100%"
+                            rounded="md"
+                            size="lg"
+                            colorScheme={tier.title === 'Premium Subscription' ? 'purple' : 'gray'}
+                            variant={tier.isCurrent ? 'solid' : (tier.title === 'Premium Subscription' ? 'solid' : 'outline')}
+                            onClick={tier.ctaAction}
+                            isDisabled={authLoading || (tier.requiresLogin && !user && tier.title !== 'Free Tier') || (tier.title === 'Premium Subscription' && user?.subscriptionStatus === 'premium') || !!isLoadingPayment}
+                            isLoading={tier.serviceType === 'subscription' && isLoadingPayment === 'subscription'}
+                            leftIcon={tier.requiresLogin && !user ? <LockIcon /> : (tier.isCurrent ? <StarIcon /> : null)}
+                          >
+                            {tier.requiresLogin && !user && tier.title !== 'Free Tier' ? 'Login to Continue' : tier.ctaText}
+                          </Button>
+                        )}
+                      </Box>
                     </VStack>
                   </Box>
                 </MotionBox>
@@ -263,19 +371,15 @@ import {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.8, duration: 0.5 }}
             >
-              <Text 
-                fontSize={{ base: 'md', md: 'lg', lg: 'xl' }}
+              <Text
+                fontSize={{ base: 'md', md: 'lg' }}
                 color="gray.500"
                 mb={4}
               >
-                Not sure which plan is right for you?
-              </Text>
-              <Text 
-                fontSize={{ base: 'md', md: 'lg', lg: 'xl' }}
-                color="gray.500"
-                mb={4}
-              >
-                support@resumeoptimizer.io
+                Questions? Contact us at{' '}
+                <Link href="mailto:support@resumeoptimizer.io" color={accentColor}>
+                  support@resumeoptimizer.io
+                </Link>
               </Text>
             </Box>
           </VStack>

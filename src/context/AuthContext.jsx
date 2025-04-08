@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
 import { useToast } from '@chakra-ui/react';
@@ -22,6 +22,34 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
+  // Function to fetch and update user profile data
+  const refreshUserProfile = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return; // No token, no refresh
+
+    try {
+      console.log("Refreshing user profile..."); // Added log
+      const response = await axios.get(API_ENDPOINTS.auth.getProfile, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const updatedUserData = response.data;
+
+      // Update state and localStorage
+      setUser(updatedUserData);
+      localStorage.setItem('user', JSON.stringify(updatedUserData));
+      console.log("User profile refreshed:", updatedUserData); // Added log
+
+    } catch (error) {
+      console.error('Failed to refresh user profile:', error);
+      // Optional: Show a toast or handle error (e.g., if token expired)
+      // If token is invalid, maybe log out?
+      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+         console.log("Token expired or invalid during refresh, logging out.");
+         logout(); // Log out if token is bad
+      }
+    }
+  }, [toast]); // Added toast dependency, logout implicitly included via scope
+
   const register = async (name, email, password) => {
     try {
       setLoading(true);
@@ -35,6 +63,9 @@ export function AuthProvider({ children }) {
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(userData));
       setUser(userData);
+
+      // Refresh profile to get full data right after registration
+      await refreshUserProfile();
 
       toast({
         title: 'Registration successful',
@@ -72,6 +103,9 @@ export function AuthProvider({ children }) {
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(userData));
       setUser(userData);
+
+      // Refresh profile to get full data right after login
+      await refreshUserProfile();
 
       toast({
         title: 'Login successful',
@@ -111,7 +145,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, token: localStorage.getItem('token'), register, login, logout, refreshUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import {
   Box,
   Button,
@@ -16,6 +16,13 @@ import {
   HStack,
   useColorModeValue,
   Textarea,
+  Progress,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
+  CloseButton,
+  Collapse
 } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 import axios from 'axios'
@@ -25,28 +32,44 @@ import { useNavigate } from 'react-router-dom'
 
 const MotionBox = motion(Box)
 
+// Define allowed MIME types
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+];
+const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx'];
+
 export default function Upload() {
   const [selectedFile, setSelectedFile] = useState(null)
-  const [plan, setPlan] = useState('basic')
   const [jobInterest, setJobInterest] = useState('')
   const [description, setDescription] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
   const toast = useToast()
   const { user } = useAuth()
   const navigate = useNavigate()
 
   const handleFileChange = (event) => {
     const file = event.target.files[0]
-    if (file && file.type === 'application/pdf') {
+    setUploadResult(null);
+    setUploadError(null);
+    if (file && ALLOWED_MIME_TYPES.includes(file.type)) {
       setSelectedFile(file)
-    } else {
+    } else if (file) {
+      event.target.value = null;
+      setSelectedFile(null);
       toast({
         title: 'Invalid file type',
-        description: 'Please upload a PDF file',
+        description: `Please upload a file with one of the following extensions: ${ALLOWED_EXTENSIONS.join(', ')}`,
         status: 'error',
-        duration: 3000,
+        duration: 5000,
         isClosable: true,
       })
+    } else {
+      setSelectedFile(null);
     }
   }
 
@@ -63,74 +86,60 @@ export default function Upload() {
       return
     }
 
+    setIsLoading(true)
+    setUploadProgress(0);
+    setUploadResult(null);
+    setUploadError(null);
+    const formData = new FormData()
+    formData.append('resume', selectedFile)
+    formData.append('jobInterest', jobInterest)
+    formData.append('description', description)
+
+    const token = localStorage.getItem('token')
+    const config = {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        Authorization: `Bearer ${token}`
+      },
+      onUploadProgress: (progressEvent) => {
+        const percentCompleted = Math.round(
+          (progressEvent.loaded * 100) / progressEvent.total
+        );
+        setUploadProgress(percentCompleted);
+      }
+    };
+
     try {
-      setIsLoading(true)
-      const formData = new FormData()
-      formData.append('resume', selectedFile)
-      formData.append('userId', user.id)
-      formData.append('plan', plan)
-      formData.append('jobInterest', jobInterest)
-      formData.append('description', description)
-
-      const token = localStorage.getItem('token')
-      await axios.post(API_ENDPOINTS.resumes.submit, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${token}`
-        }
-      })
-
+      const response = await axios.post(API_ENDPOINTS.resumes.base, formData, config); 
+      
       toast({
-        title: 'Upload successful',
-        description: 'Your resume has been uploaded and will be processed soon',
+        title: 'Upload & Basic Check Successful',
+        description: 'Your resume was uploaded and initial analysis is complete.',
         status: 'success',
         duration: 5000,
         isClosable: true,
       })
 
-      navigate('/dashboard')
+      setUploadResult(response.data); 
+      setSelectedFile(null);
+      document.getElementById('resume-upload-input').value = null;
+
     } catch (error) {
+      const errorMsg = error.response?.data?.error || 'An error occurred during upload.';
+      const errorDetails = error.response?.data?.details;
+      setUploadError(errorDetails ? `${errorMsg}: ${errorDetails}` : errorMsg);
       toast({
-        title: 'Upload failed',
-        description: error.response?.data?.error || 'An error occurred while uploading your resume',
+        title: 'Upload Failed',
+        description: errorMsg,
         status: 'error',
-        duration: 5000,
+        duration: 7000,
         isClosable: true,
       })
     } finally {
       setIsLoading(false)
+      setUploadProgress(0);
     }
   }
-
-  const prices = {
-    basic: 5,
-    premium: 10,
-    urgent: 25,
-    jobApplication: 150
-  }
-
-  const services = [
-    {
-      value: 'basic',
-      title: 'Basic Resume Edit',
-      description: 'Grammar and spelling check, basic formatting optimization, structure improvements, 24-hour delivery, one revision included'
-    },
-    {
-      value: 'premium',
-      title: 'Premium Resume Edit',
-      description: 'Comprehensive optimization, includes all Basic Edit features, ATS keyword optimization, content restructuring, industry-specific suggestions, career coaching tips, two revisions included'
-    },
-    {
-      value: 'urgent',
-      title: 'Urgent Resume Edit',
-      description: 'Includes all Premium Edit features, same-day delivery, priority support, three revisions included, emergency weekend service'
-    },
-    {
-      value: 'jobApplication',
-      title: 'Job Application Service',
-      description: 'Complete job application management for one week, tailored applications for job descriptions, cover letter writing, submission of applications, monitoring and follow-up'
-    }
-  ]
 
   return (
     <Box
@@ -228,110 +237,118 @@ export default function Upload() {
             <form onSubmit={handleSubmit}>
               <VStack spacing={{ base: 6, md: 8 }}>
                 <FormControl isRequired>
-                  <FormLabel fontSize={{ base: 'lg', md: 'xl' }}>Select Your Resume (PDF)</FormLabel>
+                  <FormLabel fontSize={{ base: 'lg', md: 'xl' }}>Select Your Resume ({ALLOWED_EXTENSIONS.join(', ')})</FormLabel>
                   <Input
+                    id="resume-upload-input"
                     type="file"
-                    accept=".pdf"
+                    accept={ALLOWED_EXTENSIONS.join(',')}
                     onChange={handleFileChange}
                     p={2}
                     border="2px dashed"
-                    borderColor="gray.300"
+                    borderColor={selectedFile ? 'green.300' : 'gray.300'}
                     _hover={{ borderColor: '#667eea' }}
                     h="auto"
                     py={4}
-                    rounded="full"
                   />
+                  {selectedFile && (
+                    <Text fontSize="sm" color="gray.500" mt={2}>Selected: {selectedFile.name}</Text>
+                  )}
                 </FormControl>
 
-                <FormControl isRequired>
-                  <FormLabel fontSize={{ base: 'lg', md: 'xl' }}>What job are you interested in?</FormLabel>
+                <FormControl>
+                  <FormLabel fontSize={{ base: 'lg', md: 'xl' }}>Target Job Title (Optional)</FormLabel>
                   <Input
                     type="text"
+                    placeholder="e.g., Software Engineer, Project Manager"
                     value={jobInterest}
                     onChange={(e) => setJobInterest(e.target.value)}
-                    placeholder="e.g., Software Engineer, Product Manager, Data Scientist"
-                    size="lg"
-                    rounded="xl"
-                    borderWidth={2}
-                    _hover={{ borderColor: '#667eea' }}
-                    _focus={{ borderColor: '#764ba2', boxShadow: '0 0 0 1px #764ba2' }}
                   />
+                  <Text fontSize="xs" color="gray.500" mt={1}>Helps provide context, especially if requesting optimization later.</Text>
                 </FormControl>
 
-                <FormControl isRequired>
-                  <FormLabel fontSize={{ base: 'lg', md: 'xl' }}>Tell us more about what you want to achieve</FormLabel>
+                <FormControl>
+                  <FormLabel fontSize={{ base: 'lg', md: 'xl' }}>Brief Description (Optional)</FormLabel>
                   <Textarea
+                    placeholder="Any specific goals or notes for your resume? (e.g., changing careers, targeting specific industry)"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Describe your career goals, specific areas you want to improve in your resume, or any particular requirements..."
-                    size="lg"
-                    rounded="xl"
-                    borderWidth={2}
-                    _hover={{ borderColor: '#667eea' }}
-                    _focus={{ borderColor: '#764ba2', boxShadow: '0 0 0 1px #764ba2' }}
-                    minH="150px"
+                    rows={3}
                   />
                 </FormControl>
 
-                <FormControl isRequired>
-                  <FormLabel fontSize={{ base: 'lg', md: 'xl' }}>Select Plan</FormLabel>
-                  <RadioGroup onChange={setPlan} value={plan}>
-                    <Stack direction="column" spacing={{ base: 4, md: 6 }}>
-                      {services.map((service) => (
-                        <MotionBox
-                          key={service.value}
-                          whileHover={{
-                            y: -2,
-                            boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
-                            transition: { duration: 0.2 }
-                          }}
-                        >
-                          <Box
-                            p={{ base: 6, md: 8 }}
-                            borderWidth={1}
-                            borderRadius="xl"
-                            borderColor={plan === service.value ? '#667eea' : 'gray.200'}
-                            _hover={{ borderColor: '#667eea' }}
-                            transition="all 0.2s"
-                          >
-                            <Radio value={service.value}>
-                              <HStack spacing={4} flexWrap="wrap">
-                                <Text fontWeight="bold" fontSize={{ base: 'lg', md: 'xl' }}>{service.title}</Text>
-                                <Text color="#667eea" fontSize={{ base: 'lg', md: 'xl' }}>${prices[service.value]}</Text>
-                              </HStack>
-                              <Text fontSize={{ base: 'md', md: 'lg' }} color="gray.500" mt={2}>
-                                {service.description}
-                              </Text>
-                            </Radio>
-                          </Box>
-                        </MotionBox>
-                      ))}
-                    </Stack>
-                  </RadioGroup>
-                </FormControl>
+                {isLoading && (
+                  <Progress 
+                    hasStripe 
+                    isAnimated 
+                    value={uploadProgress} 
+                    width="100%" 
+                    size="sm" 
+                    colorScheme="purple" 
+                    borderRadius="md"
+                  />
+                )}
 
-                <Button
-                  type="submit"
-                  size={{ base: "md", md: "lg" }}
-                  w="full"
-                  rounded="full"
+                <Button 
+                  type="submit" 
                   isLoading={isLoading}
-                  loadingText="Uploading..."
-                  bg="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                  loadingText={uploadProgress > 0 ? `Uploading ${uploadProgress}%` : 'Uploading...'}
+                  colorScheme="purple"
+                  bgGradient="linear(to-r, #667eea, #764ba2)"
                   color="white"
-                  _hover={{
-                    transform: 'translateY(-2px)',
-                    boxShadow: 'lg',
-                    bg: "linear-gradient(135deg, #764ba2 0%, #667eea 100%)"
+                  _hover={{ 
+                    bgGradient: "linear(to-r, #764ba2, #667eea)",
+                    shadow: "md"
                   }}
-                  transition="all 0.2s"
-                  mt={{ base: 4, md: 6 }}
+                  size="lg"
+                  w="full"
+                  isDisabled={!selectedFile}
                 >
-                  Upload and Pay ${prices[plan]}
+                  Upload & Run Basic ATS Check
                 </Button>
               </VStack>
             </form>
           </MotionBox>
+
+          <Collapse in={uploadResult || uploadError} animateOpacity>
+             <MotionBox
+                mt={8}
+                p={5}
+                borderWidth={1}
+                borderRadius="lg"
+                shadow="md"
+                bg={uploadError ? useColorModeValue('red.50', 'red.900') : useColorModeValue('green.50', 'green.900')}
+                borderColor={uploadError ? 'red.200' : 'green.200'}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+             >
+               {uploadError ? (
+                  <Alert status='error' variant='subtle' flexDirection='column' alignItems='center' justifyContent='center' textAlign='center'>
+                    <AlertIcon boxSize='40px' mr={0} />
+                    <AlertTitle mt={4} mb={1} fontSize='lg'>Upload Failed</AlertTitle>
+                    <AlertDescription maxWidth='sm'>{uploadError}</AlertDescription>
+                    <CloseButton alignSelf='flex-start' position='relative' right={-1} top={-1} onClick={() => setUploadError(null)} />
+                  </Alert>
+               ) : uploadResult && (
+                  <Box>
+                    <Heading size="md" mb={3} color={useColorModeValue('green.700', 'green.200')}>Basic ATS Check Results</Heading>
+                    <Text mb={2}><strong>Overall Score:</strong> {uploadResult.atsScore} / 100</Text>
+                    <Text mb={1}><strong>Feedback:</strong></Text>
+                    <VStack align="start" spacing={1} pl={4}>
+                      {uploadResult.feedback?.map((item, index) => (
+                        <HStack key={index}>
+                           <Box as={item.type === 'positive' ? 'span' : 'span'} color={item.type === 'positive' ? 'green.500' : 'orange.500'}>●</Box> 
+                           <Text fontSize="sm">{item.message}</Text>
+                        </HStack>
+                      )) || <Text fontSize="sm">No specific feedback generated.</Text>}
+                    </VStack>
+                    <Button mt={4} size="sm" onClick={() => navigate('/dashboard')}>Go to Dashboard</Button>
+                     <CloseButton position='absolute' right='8px' top='8px' onClick={() => setUploadResult(null)} />
+                  </Box>
+               )}
+             </MotionBox>
+          </Collapse>
+
         </VStack>
       </Container>
     </Box>
