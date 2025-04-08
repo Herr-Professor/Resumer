@@ -56,6 +56,10 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const toast = useToast();
+  const bgColor = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.100', 'gray.700');
+  const textColor = useColorModeValue('gray.600', 'gray.400');
+  const spinnerEmptyColor = useColorModeValue('gray.200', 'gray.700');
 
   const fetchReviewOrders = useCallback(async () => {
     try {
@@ -328,7 +332,7 @@ export default function AdminDashboard() {
             size="xl"
             thickness="4px"
             color="#667eea"
-            emptyColor={useColorModeValue('gray.200', 'gray.700')}
+            emptyColor={spinnerEmptyColor}
           />
         </MotionBox>
       </Center>
@@ -430,11 +434,11 @@ export default function AdminDashboard() {
               >
                 <Box
                   p={{ base: 4, md: 6 }}
-                  bg={useColorModeValue('white', 'gray.800')}
+                  bg={bgColor}
                   rounded="xl"
                   shadow="xl"
                   borderWidth="1px"
-                  borderColor={useColorModeValue('gray.100', 'gray.700')}
+                  borderColor={borderColor}
                   transition="all 0.2s"
                   _hover={{
                     transform: 'translateY(-4px)',
@@ -444,7 +448,7 @@ export default function AdminDashboard() {
                   <Stat>
                     <StatLabel
                       fontSize={{ base: 'sm', md: 'md' }}
-                      color={useColorModeValue('gray.600', 'gray.400')}
+                      color={textColor}
                     >
                       {stat.label}
                     </StatLabel>
@@ -467,11 +471,11 @@ export default function AdminDashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            bg={useColorModeValue('white', 'gray.800')}
+            bg={bgColor}
             rounded="xl"
             shadow="xl"
             borderWidth="1px"
-            borderColor={useColorModeValue('gray.100', 'gray.700')}
+            borderColor={borderColor}
             overflow="hidden"
           >
             <Box overflowX="auto">
@@ -587,7 +591,7 @@ export default function AdminDashboard() {
           <HStack justify="center" mt={{ base: 6, md: 8 }}>
             <Button
               leftIcon={<RepeatIcon />}
-              onClick={fetchSubmissions}
+              onClick={fetchReviewOrders}
               size={{ base: "md", md: "lg" }}
               bg="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
               color="white"
@@ -610,7 +614,7 @@ export default function AdminDashboard() {
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
         <ModalContent
-          bg={useColorModeValue('white', 'gray.800')}
+          bg={bgColor}
           rounded="xl"
           mx={{ base: 4, md: 0 }}
         >
@@ -631,7 +635,7 @@ export default function AdminDashboard() {
                   accept=".pdf"
                   onChange={(e) => {
                     if (e.target.files[0]) {
-                      handleUploadOptimized(selectedSubmission, e.target.files[0]);
+                      handleUploadOptimized(selectedReviewOrder, e.target.files[0]);
                     }
                   }}
                   p={2}

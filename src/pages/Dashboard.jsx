@@ -94,13 +94,10 @@ export default function Dashboard() {
 
   // Check if the selected submission is currently under review
   const isUnderReview = selectedSubmission && (
-    // EITHER a relevant review order exists...
-    reviewOrders.some(
-      r => r.resumeId === selectedSubmission.id && 
-           r.status !== 'completed' && 
-           r.status !== 'cancelled' // Add other terminal statuses if needed
+    reviewOrders.some(r => 
+      r.resumeId === selectedSubmission.id && 
+      !['completed', 'cancelled'].includes(r.status) // Add other terminal statuses if needed
     ) || 
-    // OR the submission status itself indicates it's pending review (from optimistic update)
     selectedSubmission.status === 'pending_review'
   );
 
@@ -707,55 +704,95 @@ export default function Dashboard() {
                   </TabPanel>
                   
                   <TabPanel>
-                    <VStack spacing={4} align="stretch">
-                        <Heading size="sm" mb={2}>Run Analysis / Order Review</Heading>
-                        {isUnderReview && (
-                            <Alert status='info' variant='subtle' flexDirection='column' alignItems='center' justifyContent='center' textAlign='center' height='100px'>
-                                <AlertIcon boxSize='40px' mr={0} />
-                                <Text mt={2} fontSize="sm">This resume is currently under professional review.</Text>
-                            </Alert>
-                        )}
-                        <Button 
-                            leftIcon={<RepeatIcon />} 
-                            colorScheme="cyan" 
-                            onClick={() => handleTriggerAnalysis('detailed_ats', selectedSubmission.id)}
-                            isLoading={isActionLoading}
-                            isDisabled={isActionLoading || isUnderReview || (user?.subscriptionStatus !== 'premium' && (!user?.ppuAtsCredits || user.ppuAtsCredits <= 0))}
-                            title={isUnderReview ? 'Resume under review' : (user?.subscriptionStatus !== 'premium' && (!user?.ppuAtsCredits || user.ppuAtsCredits <= 0) ? 'No ATS credits remaining' : '')}
-                        >
-                            Run Detailed ATS Report {user?.subscriptionStatus !== 'premium' && '(Uses 1 Credit)'}
-                        </Button>
-                        <Button 
-                            leftIcon={<EditIcon />} 
-                            colorScheme="purple" 
-                            onClick={() => handleTriggerAnalysis('job_optimization', selectedSubmission.id)}
-                            isLoading={isActionLoading}
-                            isDisabled={isActionLoading || isUnderReview || !selectedSubmission?.jobDescription || (user?.subscriptionStatus !== 'premium' && (!user?.ppuOptimizationCredits || user.ppuOptimizationCredits <= 0))}
-                            title={isUnderReview ? 'Resume under review' : (!selectedSubmission?.jobDescription ? 'Add job description first' : (user?.subscriptionStatus !== 'premium' && (!user?.ppuOptimizationCredits || user.ppuOptimizationCredits <= 0) ? 'No Optimization credits remaining' : ''))}
-                        >
-                            Run Job Optimization {user?.subscriptionStatus !== 'premium' && '(Uses 1 Credit)'}
-                        </Button>
-                        <Button 
-                            leftIcon={<ChatIcon />} 
-                            colorScheme="teal" 
-                            onClick={() => handlePayment('review', selectedSubmission.id)}
-                            isLoading={isActionLoading}
-                            isDisabled={isActionLoading || isUnderReview || reviewOrders.some(r => r.resumeId === selectedSubmission.id)}
-                            title={isUnderReview ? 'Resume under review' : (reviewOrders.some(r => r.resumeId === selectedSubmission.id) ? 'Review already ordered or in progress' : '')}
-                        >
-                            Order Professional Review ($30)
-                        </Button>
-                        <Button 
-                            leftIcon={<EditIcon />} 
-                            colorScheme="yellow" 
-                            onClick={() => navigate(`/resume-editor/${selectedSubmission.id}`)}
-                            isDisabled={isActionLoading || isUnderReview}
-                            title={isUnderReview ? 'Resume under review' : ''}
-                        >
-                            Edit Resume
-                        </Button>
-                    </VStack>
-                  </TabPanel>
+  <VStack spacing={4} align="stretch">
+    <Heading size="sm" mb={2}>Run Analysis / Order Review</Heading>
+    
+    {/* Review status alert */}
+    {isUnderReview && (
+      <Alert status='info' variant='subtle' flexDirection='column' alignItems='center' justifyContent='center' textAlign='center' height='100px'>
+        <AlertIcon boxSize='40px' mr={0} />
+        <Text mt={2} fontSize="sm">This resume is currently under professional review.</Text>
+      </Alert>
+    )}
+
+    {/* Detailed ATS Report Button */}
+    <Button 
+      leftIcon={<RepeatIcon />} 
+      colorScheme="cyan" 
+      onClick={() => handleTriggerAnalysis('detailed_ats', selectedSubmission.id)}
+      isLoading={isActionLoading}
+      isDisabled={
+        isActionLoading || 
+        isUnderReview || 
+        (user?.subscriptionStatus !== 'premium' && 
+        (!user?.ppuAtsCredits || user.ppuAtsCredits <= 0))
+      }
+      title={
+        isUnderReview ? 'Resume under review' : 
+        (user?.subscriptionStatus !== 'premium' && 
+        (!user?.ppuAtsCredits || user.ppuAtsCredits <= 0) ? 
+        'No ATS credits remaining' : '')
+      }
+    >
+      Run Detailed ATS Report {user?.subscriptionStatus !== 'premium' && '(Uses 1 Credit)'}
+    </Button>
+
+    {/* Job Optimization Button */}
+    <Button 
+      leftIcon={<EditIcon />} 
+      colorScheme="purple" 
+      onClick={() => handleTriggerAnalysis('job_optimization', selectedSubmission.id)}
+      isLoading={isActionLoading}
+      isDisabled={
+        isActionLoading || 
+        isUnderReview || 
+        !selectedSubmission?.jobDescription || 
+        (user?.subscriptionStatus !== 'premium' && 
+        (!user?.ppuOptimizationCredits || user.ppuOptimizationCredits <= 0))
+      }
+      title={
+        isUnderReview ? 'Resume under review' : 
+        (!selectedSubmission?.jobDescription ? 'Add job description first' : 
+        (user?.subscriptionStatus !== 'premium' && 
+        (!user?.ppuOptimizationCredits || user.ppuOptimizationCredits <= 0) ? 
+        'No Optimization credits remaining' : ''))
+      }
+    >
+      Run Job Optimization {user?.subscriptionStatus !== 'premium' && '(Uses 1 Credit)'}
+    </Button>
+
+    {/* Professional Review Button */}
+    <Button 
+      leftIcon={<ChatIcon />} 
+      colorScheme="teal" 
+      onClick={() => handlePayment('review', selectedSubmission.id)}
+      isLoading={isActionLoading}
+      isDisabled={
+        isActionLoading || 
+        isUnderReview || 
+        reviewOrders.some(r => r.resumeId === selectedSubmission.id)
+      }
+      title={
+        isUnderReview ? 'Resume under review' : 
+        (reviewOrders.some(r => r.resumeId === selectedSubmission.id) ? 
+        'Review already ordered or in progress' : '')
+      }
+    >
+      Order Professional Review ($30)
+    </Button>
+
+    {/* Resume Editor Button */}
+    <Button 
+      leftIcon={<EditIcon />} 
+      colorScheme="yellow" 
+      onClick={() => navigate(`/resume-editor/${selectedSubmission.id}`)}
+      isDisabled={isActionLoading || isUnderReview}
+      title={isUnderReview ? 'Resume under review' : ''}
+    >
+      Edit Resume
+    </Button>
+  </VStack>
+</TabPanel>
                 </TabPanels>
               </Tabs>
             )}

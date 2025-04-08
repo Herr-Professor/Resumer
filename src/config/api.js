@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
     getUserReviews: `${API_URL}/api/resumes/reviews`,
     downloadAuthOriginal: (id) => `${API_URL}/api/resumes/${id}/download-original`,
     downloadAuthOptimized: (id) => `${API_URL}/api/resumes/${id}/download-optimized`,
+    getUserStats: `${API_URL}/api/resumes/stats`,
   },
   payments: {
     createCheckout: `${API_URL}/api/payment/create-checkout-session`,
