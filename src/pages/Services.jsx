@@ -43,31 +43,32 @@ import {
     // Define Tiers based on Resopt.txt
     const tiers = [
       {
-        title: 'Free Tier',
-        price: '$0',
-        description: 'Get started and see basic ATS compatibility.',
-        features: [
-          'Account Sign-up',
-          'Resume Upload (PDF, DOCX)',
-          'Basic ATS Check & Score',
-          'General ATS Feedback',
-        ],
-        ctaText: 'Get Started',
-        ctaAction: () => navigate('/register'),
-        serviceType: null,
-        requiresLogin: false,
-        isCurrent: !user,
+  	title: 'Free Tier',
+  	price: '$0',
+  	description: 'Get started and see basic ATS compatibility.',
+  	features: [
+  	'Account Sign-up',
+    	'Resume Upload (PDF, DOCX)',
+    	'Basic ATS Check & Score',
+    	'General ATS Feedback',
+  	],
+  	// Updated ctaText and ctaAction
+  	ctaText: user ? 'Go to Dashboard' : 'Get Started',
+  	ctaAction: () => user ? navigate('/dashboard') : navigate('/register'),
+  	serviceType: null,
+  	requiresLogin: false,
+  	isCurrent: !user?.subscriptionStatus,
       },
       {
         title: 'Premium Subscription',
-        price: '$15 / month',
+        price: '$20 / review',
         description: 'Unlimited access for active job seekers.',
         features: [
           'All Free Tier features',
-          'Unlimited Detailed ATS Reports (AI-Powered)',
-          'Unlimited Job-Specific Optimizations (AI-Powered)',
-          'Unlimited AI Analysis clicks in Editor',
-          '(Potentially) Store multiple resume versions',
+          '20 Detailed ATS Reports (AI-Powered)',
+          '10 Job-Specific Optimizations (AI-Powered)',
+          '5 AI Analysis clicks in Editor',
+          'Store multiple resume versions',
           'Cancel Anytime',
         ],
         ctaText: user?.subscriptionStatus === 'premium' ? 'Currently Subscribed' : 'Go Premium',
@@ -83,7 +84,7 @@ import {
         features: [
           'Detailed ATS Report ($5 each)',
           'Job-Specific Optimization ($10 each)',
-          'Includes limited analysis clicks per purchase (3-5)',
+          'Includes limited analysis clicks per purchase (5)',
           'Ideal for occasional users',
         ],
         ctaText: 'Buy Credits on Dashboard',
@@ -168,7 +169,7 @@ import {
             if (response.data.status === 'paid') {
               toast({
                 title: 'Payment Successful',
-                description: 'Your credits have been added to your account.',
+                description: 'Your dashboard has been updated.',
                 status: 'success',
                 duration: 5000,
                 isClosable: true,
@@ -181,7 +182,7 @@ import {
             console.error('Error verifying payment:', error);
             toast({
               title: 'Payment Verification Failed',
-              description: 'Please contact support if your credits were not added.',
+              description: 'Please contact support.',
               status: 'error',
               duration: 5000,
               isClosable: true,
@@ -369,7 +370,7 @@ import {
                               isDisabled={authLoading || !!isLoadingPayment}
                               onClick={() => handlePayment('ppu_ats')}
                             >
-                              Buy ATS Report Credit ($5)
+                              ATS Report Credit
                             </Button>
                             <Button
                               w="100%"
@@ -381,7 +382,7 @@ import {
                               isDisabled={authLoading || !!isLoadingPayment}
                               onClick={() => handlePayment('ppu_optimization')}
                             >
-                              Buy Optimization Credit ($10)
+                              Optimization Credit
                             </Button>
                           </VStack>
                         ) : (

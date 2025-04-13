@@ -1,42 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Box,
-  Container,
-  Heading,
-  Text,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Badge,
-  Button,
-  VStack,
-  HStack,
-  useColorModeValue,
-  SimpleGrid,
-  Stat,
-  StatLabel,
-  StatNumber,
-  Spinner,
-  Center,
-  useToast,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalFooter,
-  ModalBody,
-  ModalCloseButton,
-  useDisclosure,
-  Tabs, TabList, TabPanels, Tab, TabPanel,
-  List, ListItem, ListIcon,
-  Textarea,
-  FormControl,
-  FormLabel,
-  Alert,
-  AlertIcon,
+  Box, Container, Heading, Text, Table, Thead, Tbody, Tr, Th, Td, Badge, Button, VStack, HStack, useColorModeValue, SimpleGrid, Stat, StatLabel, StatNumber, Spinner, Center, useToast, Modal, ModalOverlay, ModalContent, ModalHeader, ModalFooter, ModalBody, ModalCloseButton, useDisclosure, Tabs, TabList, TabPanels, Tab, TabPanel, List, ListItem, ListIcon, Textarea, FormControl, FormLabel, Alert, AlertIcon,
 } from '@chakra-ui/react';
 import { DownloadIcon, RepeatIcon, ViewIcon, ChatIcon, EditIcon, CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 import { motion } from 'framer-motion';
@@ -72,6 +36,7 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_t
 export default function Dashboard() {
   const [submissions, setSubmissions] = useState([]);
   const [reviewOrders, setReviewOrders] = useState([]);
+  const [userStats, setUserStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { user, refreshUserProfile } = useAuth();
@@ -131,13 +96,15 @@ export default function Dashboard() {
     const headers = { Authorization: `Bearer ${token}` };
 
     try {
-      const [submissionsRes, reviewsRes] = await Promise.all([
+      const [submissionsRes, reviewsRes, statsRes] = await Promise.all([
         axios.get(API_ENDPOINTS.resumes.getMySubmissions, { headers }),
-        axios.get(API_ENDPOINTS.resumes.getUserReviews, { headers })
+        axios.get(API_ENDPOINTS.resumes.getUserReviews, { headers }),
+        axios.get(API_ENDPOINTS.resumes.getUserStats, { headers })
       ]);
       
       setSubmissions(submissionsRes.data);
       setReviewOrders(reviewsRes.data);
+      setUserStats(statsRes.data);
 
     } catch (err) {
       setError('Failed to fetch dashboard data');
@@ -175,7 +142,7 @@ export default function Dashboard() {
             let toastDesc = 'Your purchase was successful.';
 
             if (serviceType === 'review') {
-              toastDesc = 'Your review request has been submitted.';
+              toastDesc = 'Your review request has been submitted. It may take a moment to appear in your dashboard.';
             } else if (serviceType === 'ppu_ats' || serviceType === 'ppu_optimization') {
               toastDesc = 'Your credits have been added to your account.';
             } else if (serviceType === 'subscription') {
@@ -217,7 +184,17 @@ export default function Dashboard() {
 
             // Refresh user profile to get updated credits/status
             await refreshUserProfile(); 
-            fetchData(); // Refresh dashboard data (submissions/reviews)
+            
+            // For review orders, we need to wait a bit for the webhook to process
+            // before fetching data to ensure the review order is created
+            if (serviceType === 'review') {
+              // Wait 3 seconds before fetching data to give the webhook time to process
+              setTimeout(() => {
+                fetchData();
+              }, 3000);
+            } else {
+              fetchData(); // Refresh dashboard data immediately for other service types
+            }
           }
           
           // Clean up URL parameters
@@ -346,42 +323,80 @@ export default function Dashboard() {
   const getStatusColor = (status) => {
     switch (status) {
       case 'completed':
+      case 'review_complete':
         return 'green';
-      case 'in-progress':
+      case 'pending_review':
+      case 'in_progress':
         return 'yellow';
-      case 'pending':
-        return 'gray';
+      case 'requested':
+        return 'blue';
       default:
         return 'gray';
     }
   };
 
   const calculateStats = () => {
-    const totalSubmissions = submissions.length;
-    const completedSubmissions = submissions.filter(s => 
-        s.status === 'basic_ats_complete' || 
-        s.status === 'detailed_ats_complete' || 
-        s.status === 'job_opt_complete' ||
-        s.status === 'review_complete'
-    ).length;
-    const pendingReviews = reviewOrders.filter(r => r.status === 'requested' || r.status === 'in_progress').length;
-    const completedReviews = reviewOrders.filter(r => r.status === 'completed').length;
-
-    return [
-      { label: 'Resumes Uploaded', value: totalSubmissions.toString() },
-      { label: 'Analyses Completed', value: completedSubmissions.toString() },
-      { label: 'Pending Reviews', value: pendingReviews.toString() },
-      { label: 'Completed Reviews', value: completedReviews.toString() },
+    // Default stats array for fallback scenarios
+    const defaultStats = [
+      { label: 'Resumes Uploaded', value: '0' },
+      { label: 'Analyses Completed', value: '0' },
+      { label: 'Pending Reviews', value: '0' },
+      { label: 'Completed Reviews', value: '0' },
       { label: 'ATS Credits', value: user?.ppuAtsCredits?.toString() || '0' },
       { label: 'Opt. Credits', value: user?.ppuOptimizationCredits?.toString() || '0' },
+    ];
+
+    // Check if userStats is available and is an object
+    if (!userStats || typeof userStats !== 'object') {
+      // Keep this warning, it indicates the API fetch failed or returned unexpected data
+      console.warn("API userStats unavailable or not an object, returning default stats.", userStats);
+      // Attempt to show credits from the user context as a fallback if userStats failed
+      return [
+        { label: 'Resumes Uploaded', value: 'N/A' },
+        { label: 'Analyses Completed', value: 'N/A' },
+        { label: 'Pending Reviews', value: 'N/A' },
+        { label: 'Completed Reviews', value: 'N/A' },
+        { label: 'ATS Credits', value: user?.ppuAtsCredits?.toString() ?? '0' },
+        { label: 'Opt. Credits', value: user?.ppuOptimizationCredits?.toString() ?? '0' },
+      ];
+    }
+
+    // Log the structure of userStats for debugging ONLY during development
+    if (process.env.NODE_ENV === 'development') {
+        console.log("Received userStats for calculation:", JSON.stringify(userStats, null, 2));
+    }
+
+
+    // Safely determine the value for 'Analyses Completed' from the object
+    let analysesCompletedValue = '0';
+    if (userStats.analysesCompleted &&
+        typeof userStats.analysesCompleted === 'object' &&
+        // Use optional chaining ?. just in case 'total' is missing
+        userStats.analysesCompleted.total !== undefined) {
+      analysesCompletedValue = userStats.analysesCompleted.total.toString();
+    } else {
+      // Log if the structure is not as expected
+      console.warn("userStats.analysesCompleted is not in the expected format:", userStats.analysesCompleted);
+    }
+
+    // Construct the stats array using API data directly, with nullish coalescing for safety
+    return [
+      { label: 'Resumes Uploaded', value: userStats.resumesUploaded?.toString() ?? '0' },
+      { label: 'Analyses Completed', value: analysesCompletedValue },
+      // --- Use the values directly from the userStats API response ---
+      { label: 'Pending Reviews', value: userStats.pendingReviews?.toString() ?? '0' },
+      { label: 'Completed Reviews', value: userStats.completedReviews?.toString() ?? '0' },
+      // --- Credits ---
+      { label: 'ATS Credits', value: userStats.atsCredits?.toString() ?? '0' },
+      { label: 'Opt. Credits', value: userStats.optimizationCredits?.toString() ?? '0' },
     ];
   };
 
   const handleDownload = async (submission, type) => {
     try {
       const endpoint = type === 'original' 
-        ? API_ENDPOINTS.resumes.downloadOriginal(submission.id)
-        : API_ENDPOINTS.resumes.downloadOptimized(submission.id);
+        ? API_ENDPOINTS.resumes.downloadOriginal(submission.id) 
+        : API_ENDPOINTS.resumes.downloadOptimized(submission.id); 
       
       const response = await axios.get(endpoint, {
         responseType: 'blob',
@@ -509,49 +524,52 @@ export default function Dashboard() {
 
           <MotionBox variants={itemVariants} w="full" textAlign="right">
              <Text fontSize="sm" color="gray.500">
-                Account Status: <Badge colorScheme={user?.subscriptionStatus === 'premium' ? 'green' : 'gray'}>{user?.subscriptionStatus || 'free'}</Badge> | 
-                ATS Credits: {user?.ppuAtsCredits || 0} | 
-                Optimization Credits: {user?.ppuOptimizationCredits || 0}
-             </Text>
+  		Account Status: <Badge colorScheme={user?.subscriptionStatus === 'premium' ? 'green' : 'gray'}>{user?.subscriptionStatus || 'free'}</Badge> | 
+  		ATS Credits: {user?.ppuAtsCredits || 0} | 
+  		Optimization Credits: {user?.ppuOptimizationCredits || 0}
+	     </Text>
           </MotionBox>
 
-          <SimpleGrid
-            columns={{ base: 2, md: 4 }}
-            spacing={{ base: 4, md: 6 }}
-            as={MotionBox}
-            variants={itemVariants}
-          >
-            {calculateStats().map((stat, index) => (
-              <MotionBox variants={itemVariants} key={index}>
-                <Stat
-                  p={{ base: 3, md: 5 }}
-                  shadow='md'
-                  borderWidth='1px'
-                  borderColor={borderColor}
-                  rounded='lg'
-                  bg={cardBgColor}
-                  transition="all 0.2s"
-                  _hover={{ shadow: 'lg', transform: 'translateY(-2px)' }}
-                >
-                  <StatLabel 
-                     fontWeight={'medium'} 
-                     isTruncated
-                     color={statLabelColor}
-                     fontSize={{base: 'sm', md: 'md'}}
+          {/* Conditionally render the stats grid only when userStats is available */}
+          {userStats && (
+            <SimpleGrid
+              columns={{ base: 2, md: 4 }}
+              spacing={{ base: 4, md: 6 }}
+              as={MotionBox}
+              variants={itemVariants}
+            >
+              {calculateStats().map((stat, index) => (
+                <MotionBox variants={itemVariants} key={index}>
+                  <Stat
+                    p={{ base: 3, md: 5 }}
+                    shadow='md'
+                    borderWidth='1px'
+                    borderColor={borderColor}
+                    rounded='lg'
+                    bg={cardBgColor}
+                    transition="all 0.2s"
+                    _hover={{ shadow: 'lg', transform: 'translateY(-2px)' }}
                   >
-                      {stat.label}
-                  </StatLabel>
-                  <StatNumber 
-                     fontSize={{base: 'xl', md: '2xl'}} 
-                     fontWeight={'semibold'}
-                     color={statNumberColor}
-                  >
-                      {stat.value}
-                  </StatNumber>
-                </Stat>
-              </MotionBox>
-            ))}
-          </SimpleGrid>
+                    <StatLabel 
+                      fontWeight={'medium'} 
+                      isTruncated
+                      color={statLabelColor}
+                      fontSize={{base: 'sm', md: 'md'}}
+                    >
+                        {stat.label}
+                    </StatLabel>
+                    <StatNumber 
+                      fontSize={{base: 'xl', md: '2xl'}} 
+                      fontWeight={'semibold'}
+                      color={statNumberColor}
+                    >
+                        {stat.value}
+                    </StatNumber>
+                  </Stat>
+                </MotionBox>
+              ))}
+            </SimpleGrid>
+          )}
 
           <MotionBox
             variants={itemVariants}
@@ -579,7 +597,13 @@ export default function Dashboard() {
                     <Tr key={submission.id}>
                       <Td>{submission.originalFileName}</Td>
                       <Td>{new Date(submission.submittedAt).toLocaleDateString()}</Td>
-                      <Td><Badge colorScheme={getStatusColor(submission.status)}>{submission.status}</Badge></Td>
+                      <Td>
+                        <Badge colorScheme={getStatusColor(submission.status)}>
+                          {reviewOrders.some(r => r.resumeId === submission.id) 
+                            ? `Review: ${reviewOrders.find(r => r.resumeId === submission.id).status}`
+                            : submission.status}
+                        </Badge>
+                      </Td>
                       <Td>{submission.atsScore ?? 'N/A'}</Td>
                       <Td>{submission.optimizationScore ?? 'N/A'}</Td>
                       <Td>

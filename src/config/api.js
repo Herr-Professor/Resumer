@@ -17,8 +17,8 @@ export const API_ENDPOINTS = {
     jobOptimization: (id) => `${API_URL}/api/resumes/${id}/job-optimization`,
     analyzeChanges: (id) => `${API_URL}/api/resumes/${id}/analyze-changes`,
     getUserReviews: `${API_URL}/api/resumes/reviews`,
-    downloadAuthOriginal: (id) => `${API_URL}/api/resumes/${id}/download-original`,
-    downloadAuthOptimized: (id) => `${API_URL}/api/resumes/${id}/download-optimized`,
+    downloadOriginal: (id) => `${API_URL}/api/resumes/${id}/download-original`,
+    downloadOptimized: (id) => `${API_URL}/api/resumes/${id}/download-optimized`,
     getUserStats: `${API_URL}/api/resumes/stats`,
   },
   payments: {
@@ -34,7 +34,7 @@ export const API_ENDPOINTS = {
     getAllReviews: `${API_URL}/api/admin/reviews`,
     updateReview: (id) => `${API_URL}/api/admin/reviews/${id}`,
   },
-  contact: {
-    send: `${API_URL}/api/contact`,
+   jobs: {
+    getJobs: `${API_URL}/api/jobs`,
   },
-}; 
+};
