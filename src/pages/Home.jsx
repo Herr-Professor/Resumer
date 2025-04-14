@@ -47,7 +47,7 @@ export default function Home() {
   const textColor = useColorModeValue('gray.600', 'gray.400');
   const headingColor = useColorModeValue('gray.800', 'white');
 
-  // Statistics Data - Updated to match design
+  // Statistics Data
   const stats = [
     { value: '100+', label: 'Resumes Optimized' },
     { value: '85%', label: 'Success Rate', subLabel: 'Interview callbacks' },
@@ -55,7 +55,7 @@ export default function Home() {
     { value: '4.9/5', label: 'Client Satisfaction', subLabel: 'Based on 50+ reviews' },
   ];
 
-  // Why Choose Us Features - Content from design
+  // Why Choose Us Features
    const features = [
     {
       icon: FaRobot,
@@ -79,15 +79,13 @@ export default function Home() {
     },
   ];
 
-
-  // Pricing Tiers - Updated to match design
+  // Pricing Tiers 
   const tiers = [
     {
       title: 'Free Tier',
       price: '$0',
       description: 'Get started and see basic ATS compatibility.',
       features: [
-        'Account Sign-up',
         'Resume Upload (PDF, DOCX)',
         'Basic ATS Check & Score',
         'General ATS Feedback',
@@ -103,7 +101,6 @@ export default function Home() {
         '10 Job-Specific Optimizations (AI-Powered)',
         '5 AI Analysis clicks in Editor',
         'Store multiple resume versions',
-        'Cancel Anytime',
       ],
     },
     {
@@ -113,7 +110,7 @@ export default function Home() {
       features: [
         'Detailed ATS Report ($5 each)',
         'Job-Specific Optimization ($10 each)',
-        'Includes limited analysis clicks per purchase (5)',
+        '5 AI Analysis clicks in Editor',
         'Ideal for occasional users',
       ],
     },
@@ -132,8 +129,8 @@ export default function Home() {
 
   const testimonials = [
     {
-      text: 'The resume optimizer I used was a gamechanger! I started getting calls from tech giants within weeks!',
-      name: 'John Smith',
+      text: 'The is a gamechanger! I started getting calls from tech giants within weeks!',
+      name: 'Andrew',
     },
     {
       text: 'The AI analysis helped me fix missing info from my resume. Highly recommend!',
@@ -141,11 +138,11 @@ export default function Home() {
     },
     {
       text: 'Professional, quick, and effective service! Got my dream job within a month using their service.',
-      name: 'Michael Chen',
+      name: 'Michael',
     },
   ];
 
-  // FAQ Data - Seems consistent with design
+  // FAQ Data
   const faqs = [
     {
       question: 'How does the AI-powered resume optimization work?',
@@ -153,7 +150,7 @@ export default function Home() {
     },
     {
       question: 'How long does the resume optimization process take?',
-      answer: 'The turnaround time depends on the service selected. Our AI analysis is typically very fast (minutes), while expert reviews usually take 24-72 hours.',
+      answer: 'The turnaround time depends on the service selected. Our AI analysis is typically very fast (seconds), while expert reviews usually take 24-72 hours.',
     },
     {
       question: 'Will my resume be ATS-friendly?',
@@ -171,14 +168,14 @@ export default function Home() {
 
   return (
     <Box width="100vw" minH="100vh" overflowX="hidden">
-      {/* Hero Section - Updated Layout */}
+      {/* Hero Section */}
       <Container maxW="container.xl" py={{ base: 10, md: 16 }} px={{ base: 4, md: 8 }}>
         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={10} alignItems="center">
           <Stack spacing={6}>
             <MotionBox initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
               <Heading
                 as="h1"
-                fontWeight={700} // Slightly bolder
+                fontWeight={700} 
                 fontSize={{ base: '3xl', sm: '4xl', md: '5xl', lg: '6xl' }}
                 lineHeight="120%"
                 color={headingColor}
@@ -186,8 +183,8 @@ export default function Home() {
                 Land Your Dream Job with an <br />
                 <MotionText
                   as="h1"
-                  fontWeight={700} // Slightly bolder
-                fontSize={{ base: '3xl', sm: '4xl', md: '5xl', lg: '6xl' }}
+                  fontWeight={700} 
+                  fontSize={{ base: '3xl', sm: '4xl', md: '5xl', lg: '6xl' }}
                   bgGradient={purpleGradient}
                   bgClip="text"
                   initial={{ opacity: 0 }}
@@ -207,7 +204,7 @@ export default function Home() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5 }}
             >
-              Our Human + AI-powered platform and expert reviewers help you create a resume that stands out. Get more interviews and better job offers.
+              Our AI-powered platform and expert reviewers help you create a resume that stands out. Get more interviews and better job offers.
             </MotionText>
 
             <Stack
@@ -218,21 +215,21 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.7 }}
             >
-              {/* Link component wraps Button */}
+              
               <Link to="/upload" style={{ textDecoration: 'none' }}>
                 <Button
                   size={{ base: 'md', md: 'lg' }}
                   px={8}
                   bgGradient={buttonGradient}
                   color="white"
-                  rounded="md" // Changed from full
+                  rounded="md" 
                   _hover={{
                     bgGradient: buttonHoverGradient,
-                    boxShadow: 'md', // Subtle shadow
+                    boxShadow: 'md',
                     transform: 'translateY(-2px)',
                   }}
                   transition="all 0.2s ease-in-out"
-                  rightIcon={<Icon as={FaRegPaperPlane} />} // Added icon matching Get Started
+                  rightIcon={<Icon as={FaRegPaperPlane} />}
                 >
                   Get Started Now
                 </Button>
@@ -241,17 +238,17 @@ export default function Home() {
                  <Button
                    size={{ base: 'md', md: 'lg' }}
                    px={8}
-                   variant="outline" // Outline style
-                   borderColor="purple.500" // Border color
-                   color="purple.500" // Text color
-                   rounded="md" // Changed from full
+                   variant="outline" 
+                   borderColor="purple.500" 
+                   color="purple.500" 
+                   rounded="md" 
                    _hover={{
-                     bg: useColorModeValue('purple.50', 'purple.900'), // Light hover background
+                     bg: useColorModeValue('purple.50', 'purple.900'), 
                      transform: 'translateY(-2px)',
-                     boxShadow: 'sm', // Subtle shadow
+                     boxShadow: 'sm',
                    }}
                    transition="all 0.2s ease-in-out"
-                   leftIcon={<Icon as={FaFileAlt} h={5} w={5} />} // Icon removed to match design
+                   leftIcon={<Icon as={FaFileAlt} h={5} w={5} />}
                  >
                    View Services
                  </Button>
@@ -259,7 +256,7 @@ export default function Home() {
             </Stack>
           </Stack>
 
-          {/* Resume Preview Images Area - Matching design */}
+          {/* Resume Preview Images Area */}
            <Flex display={{ base: 'none', md: 'flex' }} justifyContent="center" alignItems="center" position="relative" >
         
         <MotionBox
@@ -321,7 +318,7 @@ export default function Home() {
         </SimpleGrid>
       </Container>
 
-      {/* Statistics Section - Updated Styling */}
+      {/* Statistics Section */}
        <Box bg={useColorModeValue('purple.50', 'purple.900')} py={{ base: 10, md: 16 }}>
          <Container maxW="container.lg">
            <SimpleGrid columns={{ base: 2, md: 4 }} spacing={{ base: 6, md: 8 }}>
@@ -344,7 +341,7 @@ export default function Home() {
          </Container>
        </Box>
 
-      {/* Why Choose Us Section - Matched design */}
+      {/* Why Choose Us Section */}
       <Box py={{ base: 12, md: 20 }} width="100%" bg={lightSectionBg}>
         <Container maxW="container.lg">
           <VStack spacing={{ base: 8, md: 12 }} width="100%">
@@ -358,7 +355,7 @@ export default function Home() {
               <VStack spacing={4} textAlign="center">
                 <Heading
                   fontSize={{ base: '2xl', md: '3xl', lg: '4xl' }}
-                  color={headingColor} // Removed gradient to match design
+                  color={headingColor}
                 >
                   Why Choose Us
                 </Heading>
@@ -368,32 +365,30 @@ export default function Home() {
               </VStack>
             </MotionBox>
 
-            {/* Using 2 columns as per the visible part of the design */}
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={{ base: 6, md: 8 }} width="100%" pt={4}>
-              {/* Displaying only the first two features shown in the design */}
               {features.slice(0, 2).map((feature, index) => (
                 <MotionBox
                   key={index}
                   bg={useColorModeValue('white', darkBg)}
                   p={{ base: 6, md: 8 }}
-                  rounded="lg" // Less rounded corners
-                  shadow="sm" // Subtle shadow
+                  rounded="lg"
+                  shadow="sm"
                   border="1px"
                   borderColor={useColorModeValue(lightBorder, darkBorder)}
                   whileHover={{
-                    shadow: 'md', // Slightly larger shadow on hover
+                    shadow: 'md',
                     borderColor: 'purple.300',
                     transition: { duration: 0.2 },
                   }}
                 >
                   <VStack spacing={4} align="flex-start">
-                    {/* Icon styling simplified */}
+                    
                     <Flex
                       w={12}
                       h={12}
                       align="center"
                       justify="center"
-                      rounded="md" // Square with rounded corners
+                      rounded="md"
                       bg={useColorModeValue('purple.100', 'purple.900')}
                       color={useColorModeValue('purple.600', 'purple.300')}
                     >
@@ -408,10 +403,10 @@ export default function Home() {
                   </VStack>
                 </MotionBox>
               ))}
-               {/* Adding the next two features below */}
+
               {features.slice(2, 4).map((feature, index) => (
                  <MotionBox
-                   key={index + 2} // Ensure unique key
+                   key={index + 2}
                    bg={useColorModeValue('white', darkBg)}
                    p={{ base: 6, md: 8 }}
                    rounded="lg"
@@ -450,7 +445,7 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* Pricing Section - Updated with design content */}
+      {/* Pricing Section  */}
       <Box py={{ base: 12, md: 20 }} width="100%" bg={useColorModeValue('white', 'gray.800')}>
         <Container maxW="100%" px={{ base: 4, md: 8 }} centerContent>
           <VStack spacing={{ base: 8, md: 12 }} width="100%" maxW={{ base: '100%', md: '90%', lg: '80%' }}>
@@ -507,7 +502,7 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* What Our Clients Say Section - Matched Design */}
+      {/* What Our Clients Say Section */}
       <Box py={{ base: 12, md: 20 }} width="100%" bg={lightSectionBg}>
         <Container maxW="container.lg">
           <VStack spacing={{ base: 8, md: 12 }} width="100%">
@@ -536,15 +531,14 @@ export default function Home() {
                   shadow="sm"
                   border="1px"
                   borderColor={useColorModeValue(lightBorder, darkBorder)}
-                  textAlign="center" // Center align text
+                  textAlign="center"
                 >
-                  {/* Placeholder for Avatar/Image if needed in future */}
-                   {/* <Center pb={4}> <Avatar size="lg" name={testimonial.name} /> </Center> */}
+                  
                   <Text fontStyle="italic" color={textColor}>"{testimonial.text}"</Text>
                   <Text mt={4} fontWeight="bold" color={headingColor}>
                     {testimonial.name}
                   </Text>
-                  {/* Title removed as per request */}
+                  
                 </Box>
               ))}
             </SimpleGrid>
@@ -552,10 +546,10 @@ export default function Home() {
         </Container>
       </Box>
 
-      {/* FAQ Section - Matched Design */}
+      {/* FAQ Section */}
        <Box py={{ base: 12, md: 20 }} width="100%" bg={lightBg}>
-         <Container maxW="container.lg"> {/* Consistent width */}
-           <VStack spacing={{ base: 8, md: 12 }} width="100%" maxW="4xl" mx="auto"> {/* Centered and max width */}
+         <Container maxW="container.lg"> 
+           <VStack spacing={{ base: 8, md: 12 }} width="100%" maxW="4xl" mx="auto"> 
              <MotionBox
                initial={{ opacity: 0, y: 20 }}
                whileInView={{ opacity: 1, y: 0 }}
@@ -589,7 +583,6 @@ export default function Home() {
                ))}
              </Accordion>
 
-              {/* Added 'Still have questions?' part from design */}
              <Text pt={6} color={textColor}>
                 Still have questions? Contact us at{' '}
                 <Link href="mailto:support@resumeoptimizer.io" style={{ color: '#6B46C1', textDecoration: 'underline' }}>
@@ -600,8 +593,6 @@ export default function Home() {
            </VStack>
          </Container>
        </Box>
-
-      {/* Footer section would go here - outside the scope of Home component modification based on prompt */}
 
     </Box>
   );

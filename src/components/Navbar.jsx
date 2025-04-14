@@ -10,8 +10,8 @@ import {
   MenuItem,
   Avatar,
   Text,
-  Image, // <-- Import Image component
-  HStack, // <-- Import HStack for logo + text layout
+  Image, 
+  HStack, 
 } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -19,7 +19,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const logoPath = '/egg.png'; // Path to logo in public folder
+  const logoPath = '/egg.png';
 
   const handleLogout = () => {
     logout();
@@ -67,12 +67,13 @@ export default function Navbar() {
                 Services
               </Button>
             </Link>
+            {/*
             <Link to="/jobs"> 
               <Button variant="ghost" fontWeight="medium">
                 Jobs
               </Button>
             </Link>
-
+            */}
             {/* Conditional Auth Section */}
             {user ? (
               <>
