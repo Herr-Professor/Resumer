@@ -47,10 +47,9 @@ import {
   	price: '$0',
   	description: 'Get started and see basic ATS compatibility.',
   	features: [
-  	'Account Sign-up',
-    	'Resume Upload (PDF, DOCX)',
-    	'Basic ATS Check & Score',
-    	'General ATS Feedback',
+  	    'Resume Upload (PDF, DOCX)',
+        'Basic ATS Check & Score',
+        'General ATS Feedback',
   	],
   	// Updated ctaText and ctaAction
   	ctaText: user ? 'Go to Dashboard' : 'Get Started',
@@ -69,7 +68,6 @@ import {
           '10 Job-Specific Optimizations (AI-Powered)',
           '5 AI Analysis clicks in Editor',
           'Store multiple resume versions',
-          'Cancel Anytime',
         ],
         ctaText: user?.subscriptionStatus === 'premium' ? 'Currently Subscribed' : 'Go Premium',
         ctaAction: () => handlePayment('subscription'),
@@ -84,7 +82,7 @@ import {
         features: [
           'Detailed ATS Report ($5 each)',
           'Job-Specific Optimization ($10 each)',
-          'Includes limited analysis clicks per purchase (5)',
+          '5 AI Analysis clicks in Editor',
           'Ideal for occasional users',
         ],
         ctaText: 'Buy Credits on Dashboard',
