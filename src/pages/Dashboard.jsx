@@ -393,35 +393,147 @@ export default function Dashboard() {
   };
 
   const handleDownload = async (submission, type) => {
-    try {
-      const endpoint = type === 'original' 
-        ? API_ENDPOINTS.resumes.downloadOriginal(submission.id) 
-        : API_ENDPOINTS.resumes.downloadOptimized(submission.id); 
-      
-      const response = await axios.get(endpoint, {
-        responseType: 'blob',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', type === 'original' 
-        ? submission.originalFileName
-        : `optimized-${submission.originalFileName}`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (error) {
+    // Construct the backend endpoint URL
+    const endpoint = type === 'original' 
+      ? API_ENDPOINTS.resumes.downloadOriginal(submission.id) 
+      : API_ENDPOINTS.resumes.downloadOptimized(submission.id);
+
+    // Get the token
+    const token = localStorage.getItem('token');
+    if (!token) {
       toast({
-        title: 'Download failed',
-        description: error.response?.data?.error || `Error downloading the ${type} resume`,
+        title: 'Authentication Error',
+        description: 'Cannot download file. Please log in again.',
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
+      return; // Stop if no token
+    }
+
+    // --- OPTION 1: Direct Navigation (Recommended) ---
+    // Construct the full URL with the token (using a query parameter is one way,
+    // but less secure if URLs are logged. A backend session/cookie might be better long-term,
+    // but for JWT, sending it to the redirect endpoint which then validates is standard).
+    // Since the backend endpoint /api/resumes/.../:id/download-original requires the
+    // Authorization header, direct navigation won't work easily with JWT Bearer tokens,
+    // as we can't set headers for window.location.href.
+
+    // --- OPTION 2: Fetch and Simulate Click (Keeps Auth Header logic) ---
+    // We need to fetch but NOT expect a blob, just check the response status
+    // If the backend redirect (302) works, the browser handles the download.
+    // However, fetch API by default doesn't expose redirect responses easily (opaque redirect).
+    // We can try initiating the download via a form or hidden iframe, but the 
+    // simplest reliable way is often to fetch the blob URL manually if needed.
+
+    // --- OPTION 3: Get Blob URL First (If direct redirect fails due to auth header) ---
+    // If the backend could provide the signed Blob URL directly instead of redirecting,
+    // this would be simpler. But assuming the current redirect logic:
+
+    // Let's revert to the original Axios logic BUT handle the redirect issue.
+    // The core issue might be that Axios + responseType:'blob' doesn't follow redirects well.
+    // Try *without* responseType: 'blob' initially just to see if the redirect happens.
+    // We can then try fetching the blob URL manually if needed.
+
+    // --- Let's try simulating a link click which *should* include credentials if browser handles correctly --- 
+    // This relies on the browser sending credentials (cookies) if your backend uses them.
+    // For Bearer token, this won't work directly.
+    
+    // --- FINAL ATTEMPT: Use fetch with manual redirect handling (More Complex) --- 
+    // This is getting complicated. Let's simplify.
+
+    // --- Simplest Approach: Just open the authenticated endpoint URL in a new tab --- 
+    // The browser should handle the auth (if cookie-based) or the backend validates the token
+    // and issues the redirect which the browser follows.
+    try {
+        const fullUrl = `${import.meta.env.VITE_API_BASE_URL}${endpoint}`;
+        
+        // We need to trigger a request that *includes* the Authorization header.
+        // Setting window.location won't do that.
+        // Fetch API can, but handling the redirect + download is tricky.
+
+        // Let's re-attempt the original Axios logic, maybe the 404 was the real issue before.
+        // If this still fails, it points back to the backend 404 problem.
+        const response = await axios.get(endpoint, {
+            responseType: 'blob', // Keep this for now, assuming the backend 404 might be fixed
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          
+          // If we reach here, the backend MUST have sent a 200 OK with a blob,
+          // which means the redirect logic was changed or bypassed.
+          // Or, Axios somehow handled the 302 + redirect + final blob fetch.
+          const url = window.URL.createObjectURL(new Blob([response.data]));
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', type === 'original' 
+            ? submission.originalFileName 
+            : `optimized-${submission.originalFileName}`); 
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(url); // Clean up object URL
+
+    } catch (error) {
+        console.error("Download error:", error);
+        // Log the detailed error object
+        if (error.response) {
+            // The request was made and the server responded with a status code
+            // that falls out of the range of 2xx
+            console.error('Error response data:', error.response.data);
+            console.error('Error response status:', error.response.status);
+            console.error('Error response headers:', error.response.headers);
+             // Attempt to read error message if response was blob but contained JSON error
+            if (error.response.data instanceof Blob && error.response.data.type.includes('json')) {
+                try {
+                    const errorJson = JSON.parse(await error.response.data.text());
+                     toast({
+                        title: 'Download failed',
+                        description: errorJson.error || errorJson.message || `Server error ${error.response.status}`,
+                        status: 'error',
+                        duration: 3000,
+                        isClosable: true,
+                    });
+                } catch (parseError) {
+                     toast({
+                        title: 'Download failed',
+                        description: `Error downloading the ${type} resume. Status: ${error.response.status}`,
+                        status: 'error',
+                        duration: 3000,
+                        isClosable: true,
+                    });
+                }
+            } else {
+                 toast({
+                    title: 'Download failed',
+                    description: error.response.data?.error || error.response.data?.message || `Server error ${error.response.status}`,
+                    status: 'error',
+                    duration: 3000,
+                    isClosable: true,
+                });
+            }
+        } else if (error.request) {
+            // The request was made but no response was received
+            console.error('Error request:', error.request);
+            toast({
+                title: 'Download failed',
+                description: 'No response received from server.',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+              });
+        } else {
+            // Something happened in setting up the request that triggered an Error
+            console.error('Error message:', error.message);
+            toast({
+                title: 'Download failed',
+                description: error.message || `Error downloading the ${type} resume`,
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+              });
+        }
     }
   };
 
