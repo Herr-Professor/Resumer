@@ -416,8 +416,7 @@ export default function Dashboard() {
       // Create a temporary link element
       const link = document.createElement('a');
       link.href = fileUrl; // Use the direct Blob URL
-      link.target = '_blank'; // Optional: Helps in some browsers, opens new tab briefly
-      link.rel = 'noopener noreferrer'; // Security for target="_blank"
+      link.rel = 'noopener noreferrer'; // Keep for security if target were used, but harmless otherwise
       
       // Set the download attribute to suggest a filename
       link.setAttribute('download', downloadFileName);
